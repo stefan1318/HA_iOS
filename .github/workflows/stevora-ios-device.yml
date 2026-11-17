@@ -3,6 +3,7 @@ name: STEVORA iOS device IPA (unsigned)
 # IPA builds are deliberate release/test candidates, not every source commit.
 # Updating this workflow triggers a fresh IPA build of the latest branch revision.
 # STEVORA iOS 2.2 preview: approved brand assets, Liquid Glass and account-verified Assist.
+# Release candidate includes validated pipeline isolation across account switching.
 on:
   workflow_dispatch:
   push:
