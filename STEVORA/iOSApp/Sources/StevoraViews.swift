@@ -87,6 +87,7 @@ private struct OnboardingView: View {
 
 private enum Screen: String, CaseIterable {
     case home, rooms, climate, lights, settings
+    @MainActor
     func label(_ model: StevoraModel) -> String {
         switch self {
         case .home: model.localized("Начало", "Home")
