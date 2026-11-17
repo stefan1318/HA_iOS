@@ -20,6 +20,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Generate STEVORA icon
+        run: |
+          swift STEVORA/iOSApp/Branding/generate-icon.swift STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - name: Generate project
         run: |
           cd STEVORA/iOSApp
