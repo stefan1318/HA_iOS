@@ -175,22 +175,23 @@ private struct DashboardView: View {
     }
 
     private func filtered(_ screen: Screen) -> [HAEntity] {
+        let visible = model.entities.filter { !$0.id.localizedCaseInsensitiveContains("backlight") }
         switch screen {
         case .home:
-            return model.entities.filter { ["climate", "light", "sensor"].contains($0.domain) }
+            return visible.filter { ["climate", "light", "sensor"].contains($0.domain) }
                 .prefix(14).map { $0 }
         case .rooms:
-            return model.entities.filter { ["light", "switch", "fan", "climate"].contains($0.domain) }
+            return visible.filter { ["light", "switch", "fan", "climate"].contains($0.domain) }
         case .climate:
-            return model.entities.filter {
+            return visible.filter {
                 $0.domain == "climate" ||
                 ($0.domain == "sensor" &&
                  ($0.id.localizedCaseInsensitiveContains("temperature") ||
                   $0.id.localizedCaseInsensitiveContains("humidity") ||
                   $0.id.localizedCaseInsensitiveContains("humudity")))
             }
-        case .lights: return model.entities.filter { $0.domain == "light" }
-        case .routines: return model.entities.filter { ["scene", "script", "automation"].contains($0.domain) }
+        case .lights: return visible.filter { $0.domain == "light" }
+        case .routines: return visible.filter { ["scene", "script", "automation"].contains($0.domain) }
         case .settings: return []
         }
     }
@@ -230,7 +231,7 @@ private struct DeviceTile: View {
                     .foregroundStyle(StevoraStyle.accent)
                     .frame(width: 34)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(entity.name).font(.headline).lineLimit(2)
+                    Text(displayName).font(.headline).lineLimit(2)
                     Text(entity.state + (entity.attributes.unit_of_measurement ?? ""))
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -272,15 +273,24 @@ private struct DeviceTile: View {
                     }
                 }
                 .font(.caption)
-                .onAppear {
-                    if let b = entity.attributes.brightness {
-                        brightness = Double(b) / 255 * 100
-                    }
-                }
+                .onAppear { syncBrightness() }
+                .onChange(of: entity.attributes.brightness) { _ in syncBrightness() }
             }
         }
         .padding(16)
         .background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func syncBrightness() {
+        if let b = entity.attributes.brightness {
+            brightness = max(1, min(100, Double(b) / 255 * 100))
+        }
+    }
+
+    private var displayName: String {
+        if entity.attributes.friendly_name != nil { return entity.name }
+        let suffix = entity.id.split(separator: ".").last.map(String.init) ?? entity.id
+        return suffix.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private var icon: String {
