@@ -44,7 +44,7 @@ public struct StevoraServer: Equatable, Sendable {
     public init?(address: String) {
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = url.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
+              scheme == "https",
               let host = url.host, !host.isEmpty,
               url.user == nil, url.password == nil,
               url.query == nil, url.fragment == nil else { return nil }
@@ -53,7 +53,10 @@ public struct StevoraServer: Equatable, Sendable {
 
     public func apiURL(path: String) -> URL? {
         guard path.hasPrefix("/api/"), !path.hasPrefix("//") else { return nil }
-        return URL(string: path, relativeTo: baseURL)?.absoluteURL
+        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
+              url.scheme == baseURL.scheme, url.host == baseURL.host,
+              url.port == baseURL.port else { return nil }
+        return url
     }
 }
 
