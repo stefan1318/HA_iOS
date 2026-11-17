@@ -78,7 +78,9 @@ struct HAClient {
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
         guard path.hasPrefix("/api/"), !path.hasPrefix("//"),
               let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
-              url.host == baseURL.host else { throw HAError.invalidURL }
+              url.scheme == baseURL.scheme,
+              url.host == baseURL.host,
+              url.port == baseURL.port else { throw HAError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 20
