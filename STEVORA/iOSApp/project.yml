@@ -28,6 +28,7 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
     info:
+      path: Generated/StevoraInfo.plist
       properties:
         CFBundleURLTypes:
           - CFBundleURLSchemes:
