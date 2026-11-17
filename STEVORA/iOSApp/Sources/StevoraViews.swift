@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Native STEVORA iOS 26 design, sharing layout and semantic tokens with Android 2.1.
-private enum Brand {
+enum Brand {
     static let background = Color(red: 8/255, green: 19/255, blue: 31/255)
     static let surface = Color(red: 18/255, green: 36/255, blue: 55/255)
     static let raised = Color(red: 25/255, green: 49/255, blue: 71/255)
@@ -12,7 +12,7 @@ private enum Brand {
     static let border = Color(red: 41/255, green: 69/255, blue: 90/255)
 }
 
-private struct StevoraGlassCard: ViewModifier {
+struct StevoraGlassCard: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
@@ -26,7 +26,7 @@ private struct StevoraGlassCard: ViewModifier {
     }
 }
 
-private struct StevoraTouchStyle: ButtonStyle {
+struct StevoraTouchStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
