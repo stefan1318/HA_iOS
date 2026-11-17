@@ -1,27 +1,25 @@
-# STEVORA iOS native prototype
+# STEVORA iOS — Beta 2 development candidate
 
-This is an **independently buildable SwiftUI prototype inside the Home Assistant iOS fork**. It is not yet wired into the upstream HomeAssistant.xcodeproj app targets.
+Native SwiftUI STEVORA app built independently with XcodeGen, minimum iOS 16.4.
+
+## Implemented in source
+- BG/EN branded dark UI, STEVORA monogram app icon and launch storyboard.
+- Native devices, lights, climate, scenes, favorites, quick home temperature/humidity summary.
+- Home Assistant REST service calls and event-driven WebSocket state changes with reconnect.
+- OAuth2 authorization-code with PKCE via ASWebAuthenticationSession, access/refresh token Keychain storage and refresh on REST 401.
+- Development-only long-lived token fallback, to be removed after OAuth device verification.
+- Native Assist text chat via /api/conversation/process and iOS Speech microphone transcription.
+- Provisional room filter based on entity names, NOT Home Assistant area registry.
+- Backlight controls hidden, no backlight power state changed.
+
+## Important limitations and release blockers
+- This is a **development candidate**, not a tested or published Beta 2. Confirm GitHub Actions device and simulator builds, then test on a physical iPhone.
+- OAuth redirect/client_id compatibility must be verified against the actual Home Assistant instance. Session expiration during WebSocket operation requires further work.
+- Voice transcription is push-to-talk, NOT wake-word listening; Home Assistant conversation agent must be configured.
+- The app icon is a generated STEVORA S monogram, not the final approved original STEVORA brand artwork. Replace with the original vector/PNG before release.
+- True room/area mapping, accessibility audit, full color/light controls, security audit, app lifecycle and background reliability, tests and TestFlight distribution remain pending.
+- Unsigned IPA requires AltStore/Apple signing. No app-store production signing is included.
+- All network access requires valid HTTPS trust. Never disable TLS verification.
 
 ## Build
-Run the GitHub workflow `STEVORA native iOS simulator build` on `feature/stevora-ios`. It installs XcodeGen, generates `StevoraCompanion.xcodeproj`, and runs an unsigned simulator build. A successful artifact is for **iOS Simulator only**, not installation on a physical iPhone.
-
-## Implemented
-- Dark STEVORA-inspired navigation with Home, Devices, Climate, Lights, Settings
-- BG/EN UI, HTTPS server address, development-only long-lived access token in iOS Keychain
-- Live REST states refresh and service calls for light/switch/fan/climate
-- Temperature/humidity sensor visibility when Home Assistant exposes the entities
-- Logout, network errors, manual refresh
-
-## Not production ready
-- This implementation is not a port of the complete Android stable UI; final Android assets/screens must be audited and matched.
-- Authentication currently uses a **manual long-lived token** for development. Before public release integrate Home Assistant OAuth2 authorization code + PKCE, safe redirect handling and token refresh using upstream Companion authentication.
-- No original STEVORA icon asset has been imported. No fabricated logo should be shipped.
-- No WebSocket live state subscription, native Assist, notifications, widgets, Siri, biometric unlock, location or background service.
-- No signed device IPA, TestFlight build, Apple entitlement audit or completed end-to-end testing.
-- Existing upstream iOS app continues to exist unchanged on main.
-
-## Security
-HTTPS required, no arbitrary HTTP transport exception; no credentials in Git. Only use development tokens on trusted servers and revoke test tokens after testing.
-
-## Next release gate
-Successful CI compile and simulator smoke test, then full integration with upstream iOS Companion OAuth and lifecycle, Android parity audit, Apple signing and real-device validation.
+The device workflow generates a PNG icon using Swift/AppKit on the macOS runner, generates the Xcode project with XcodeGen, builds an unsigned iOS app and uploads an unsigned IPA.
