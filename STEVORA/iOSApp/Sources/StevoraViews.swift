@@ -59,6 +59,21 @@ private struct OnboardingView: View {
                     .padding(20)
                     .background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 20))
                     Button {
+                        Task { await model.signIn() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if model.busy { ProgressView().tint(.black) }
+                            Label(model.localized("Вход със STEVORA", "Sign in to STEVORA"), systemImage: "lock.shield")
+                                .fontWeight(.bold)
+                            Spacer()
+                        }.padding(14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(StevoraStyle.accent)
+                    .foregroundStyle(.black)
+                    .disabled(model.busy || model.address.isEmpty)
+                    Button {
                         Task { await model.connect() }
                     } label: {
                         HStack {
@@ -86,7 +101,7 @@ private struct OnboardingView: View {
 }
 
 private enum Screen: String, CaseIterable {
-    case home, rooms, climate, lights, routines, settings
+    case home, rooms, climate, lights, routines, assist, settings
     @MainActor
     func label(_ model: StevoraModel) -> String {
         switch self {
@@ -95,6 +110,7 @@ private enum Screen: String, CaseIterable {
         case .climate: model.localized("Климат", "Climate")
         case .lights: model.localized("Светлини", "Lights")
         case .routines: model.localized("Сцени", "Scenes")
+        case .assist: "Assist"
         case .settings: model.localized("Настройки", "Settings")
         }
     }
@@ -105,6 +121,7 @@ private enum Screen: String, CaseIterable {
         case .climate: "thermometer.medium"
         case .lights: "lightbulb.fill"
         case .routines: "play.square.stack.fill"
+        case .assist: "waveform.circle.fill"
         case .settings: "gearshape.fill"
         }
     }
@@ -120,10 +137,14 @@ private struct DashboardView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             header
+                            if screen == .home { homeSummary }
+                            if screen == .rooms { roomSelector }
                             if let error = model.error {
                                 Text(error).font(.footnote).foregroundStyle(.red)
                             }
-                            if screen == .settings {
+                            if screen == .assist {
+                                StevoraAssistView().frame(minHeight: 520)
+                            } else if screen == .settings {
                                 settings
                             } else {
                                 let items = filtered(screen)
@@ -174,6 +195,43 @@ private struct DashboardView: View {
         }
     }
 
+    private var homeSummary: some View {
+        HStack(spacing: 12) {
+            summaryTile("thermometer", title: model.localized("Температура", "Temperature"),
+                        value: model.entities.first(where: { $0.id.contains("homepod_temperature") })?.state ?? "—", unit: "°C")
+            summaryTile("humidity", title: model.localized("Влажност", "Humidity"),
+                        value: model.entities.first(where: { $0.id.contains("homepod_humidity") })?.state ?? "—", unit: "%")
+        }
+    }
+
+    private func summaryTile(_ icon: String, title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon).font(.caption).foregroundStyle(.cyan)
+            Text(value + unit).font(.title2.bold())
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16).background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var roomSelector: some View {
+        let rooms = Array(Set(model.entities.compactMap { entity -> String? in
+            let name = entity.name
+            return name.contains(" ") ? String(name.split(separator: " ").first ?? "") : nil
+        })).sorted()
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                roomButton(model.localized("Всички", "All"), id: "all")
+                roomButton("★", id: "favorites")
+                ForEach(rooms, id: \.self) { room in roomButton(room, id: room) }
+            }
+        }
+    }
+
+    private func roomButton(_ title: String, id: String) -> some View {
+        Button(title) { model.selectedRoom = id }
+            .buttonStyle(.bordered)
+            .tint(model.selectedRoom == id ? .cyan : .gray)
+    }
+
     private func filtered(_ screen: Screen) -> [HAEntity] {
         let visible = model.entities.filter { !$0.id.localizedCaseInsensitiveContains("backlight") }
         switch screen {
@@ -181,7 +239,12 @@ private struct DashboardView: View {
             return visible.filter { ["climate", "light", "sensor"].contains($0.domain) }
                 .prefix(14).map { $0 }
         case .rooms:
-            return visible.filter { ["light", "switch", "fan", "climate"].contains($0.domain) }
+            return visible.filter {
+                guard ["light", "switch", "fan", "climate"].contains($0.domain) else { return false }
+                if model.selectedRoom == "favorites" { return model.favorites.contains($0.id) }
+                if model.selectedRoom == "all" { return true }
+                return $0.name.localizedCaseInsensitiveContains(model.selectedRoom)
+            }
         case .climate:
             return visible.filter {
                 $0.domain == "climate" ||
@@ -192,7 +255,7 @@ private struct DashboardView: View {
             }
         case .lights: return visible.filter { $0.domain == "light" }
         case .routines: return visible.filter { ["scene", "script", "automation"].contains($0.domain) }
-        case .settings: return []
+        case .assist, .settings: return []
         }
     }
 
@@ -236,6 +299,9 @@ private struct DeviceTile: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button { model.toggleFavorite(entity.id) } label: {
+                    Image(systemName: model.favorites.contains(entity.id) ? "star.fill" : "star")
+                }.accessibilityLabel("Favorite")
                 if ["scene", "script", "automation"].contains(entity.domain) {
                     Button {
                         Task { await model.runRoutine(entity) }
