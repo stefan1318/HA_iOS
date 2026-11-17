@@ -7,6 +7,7 @@ final class StevoraModel: ObservableObject {
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
+    @Published var liveConnected = false
     @Published var busy = false
     @Published var error: String?
     @Published var entities: [HAEntity] = []
@@ -41,19 +42,23 @@ final class StevoraModel: ObservableObject {
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
             connected = true
+            liveConnected = false
             liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
                 guard let self, self.connected else { return }
+                self.liveConnected = true
                 if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
                     self.entities[index] = entity
                 } else {
                     self.entities.append(entity)
                 }
             }, onReconnect: { [weak self] in
+                self?.liveConnected = false
                 await self?.refresh()
             })
         } catch {
             liveUpdates.stop()
             connected = false
+            liveConnected = false
             self.error = error.localizedDescription
         }
     }
@@ -111,6 +116,7 @@ final class StevoraModel: ObservableObject {
         CredentialStore.delete(key: "access_token")
         token = ""
         connected = false
+        liveConnected = false
         entities = []
         error = nil
     }
