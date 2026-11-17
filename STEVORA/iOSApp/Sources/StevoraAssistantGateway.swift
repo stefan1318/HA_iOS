@@ -107,8 +107,7 @@ actor StevoraAssistantGateway {
     private func verifiedRoute() async throws -> StevoraAssistantRoute {
         let user = try await request("auth/current_user")
         guard let name = user["name"] as? String,
-              user["is_admin"] as? Bool,
-              user["is_owner"] as? Bool else { throw StevoraAssistantError.authentication }
+              user["is_admin"] is Bool else { throw StevoraAssistantError.authentication }
         let elevated = isAdmin(user, owner: user["is_owner"] as? Bool ?? false)
         let expected = elevated
             ? "conversation.living_room_openai_conversation"
