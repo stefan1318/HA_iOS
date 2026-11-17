@@ -9,6 +9,17 @@ struct HAEntity: Decodable, Identifiable {
         let unit_of_measurement: String?
         let brightness: Int?
         let rgb_color: [Int]?
+        let hvac_modes: [String]?
+        let fan_modes: [String]?
+        let fan_mode: String?
+        let preset_modes: [String]?
+        let preset_mode: String?
+        let min_temp: Double?
+        let max_temp: Double?
+        let supported_color_modes: [String]?
+        let color_mode: String?
+        let effect_list: [String]?
+        let effect: String?
     }
     let entity_id: String
     let state: String
