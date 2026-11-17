@@ -19,10 +19,12 @@ permissions:
 
 jobs:
   device-ipa:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Xcode environment
+        run: xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate STEVORA icon
