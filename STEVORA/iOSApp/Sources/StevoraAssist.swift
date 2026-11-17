@@ -15,35 +15,83 @@ final class StevoraAssistModel: ObservableObject {
     @Published var busy = false
     @Published var listening = false
     @Published var error: String?
+    @Published var route: StevoraAssistantRoute?
+    @Published var status = "Checking account and Assist pipelines…"
+
     private var conversationID: String?
+    private var selectedPipelineID: String?
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "bg-BG"))
     private let audioEngine = AVAudioEngine()
     private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
 
+    func inspect(address: String, token: String) async {
+        guard !busy else { return }
+        route = nil
+        status = "Verifying Home Hub account…"
+        do {
+            let selected = try await StevoraAssistantGateway(address: address, token: token).inspect()
+            if selected.pipelineID != selectedPipelineID {
+                conversationID = nil
+                messages = []
+                selectedPipelineID = selected.pipelineID
+            }
+            route = selected
+            status = "\(selected.pipelineName) • \(selected.roleLabel)"
+            error = nil
+        } catch {
+            route = nil  // Fail closed. Never use an arbitrary/default agent.
+            selectedPipelineID = nil
+            conversationID = nil
+            status = "Assist unavailable for this account"
+            self.error = error.localizedDescription
+        }
+    }
+
     func send(address: String, token: String) async {
         let message = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !busy else { return }
+        guard !message.isEmpty, !busy, route != nil else { return }
+        busy = true
+        error = nil
         draft = ""
         messages.append(StevoraMessage(role: "user", content: message))
-        busy = true
         defer { busy = false }
         do {
-            let client = try HAClient(address: address, token: token)
-            let (answer, nextID) = try await client.conversation(text: message, conversationID: conversationID)
-            conversationID = nextID
+            let (answer, newID, verified) = try await StevoraAssistantGateway(
+                address: address, token: token
+            ).converse(text: message, conversationID: conversationID)
+            // The session is reverified server-side on every command.
+            if let previous = selectedPipelineID, previous != verified.pipelineID {
+                conversationID = nil
+                messages = []
+                selectedPipelineID = verified.pipelineID
+                route = verified
+                status = "\(verified.pipelineName) • \(verified.roleLabel)"
+                error = "Account or pipeline changed. Start a new conversation."
+                return
+            }
+            conversationID = newID
+            route = verified
+            status = "\(verified.pipelineName) • \(verified.roleLabel)"
             messages.append(StevoraMessage(role: "assistant", content: answer))
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            route = nil
+            selectedPipelineID = nil
+            conversationID = nil
+            status = "Assist connection unavailable"
+            self.error = error.localizedDescription
+        }
     }
 
     func startListening() async {
+        guard route != nil else { error = "Verify account and Assist pipeline first"; return }
         guard !listening else { stopListening(); return }
-        let speechPermission = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+        let authorized = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             SFSpeechRecognizer.requestAuthorization { status in
                 continuation.resume(returning: status == .authorized)
             }
         }
-        guard speechPermission else { error = "Speech recognition permission required"; return }
+        guard authorized else { error = "Speech recognition permission required"; return }
         let microphone = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in continuation.resume(returning: granted) }
         }
@@ -74,7 +122,10 @@ final class StevoraAssistModel: ObservableObject {
     }
 
     func stopListening() {
-        if audioEngine.isRunning { audioEngine.stop(); audioEngine.inputNode.removeTap(onBus: 0) }
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
         speechRequest?.endAudio()
         recognition?.cancel()
         recognition = nil
@@ -86,50 +137,141 @@ final class StevoraAssistModel: ObservableObject {
 
 struct StevoraAssistView: View {
     @EnvironmentObject private var model: StevoraModel
-    @StateObject private var assist = StevoraAssistModel()
+    @StateObject private var assistant = StevoraAssistModel()
+    @FocusState private var composerFocused: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "waveform.circle.fill").font(.title)
-                Text("STEVORA Assist").font(.title2.bold())
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 13) {
+                Image(systemName: "waveform")
+                    .font(.title2.bold()).foregroundStyle(Brand.background)
+                    .frame(width: 49, height: 49)
+                    .background(Brand.cyan, in: Circle())
+                    .scaleEffect(assistant.listening ? 1.12 : 1)
+                    .animation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true),
+                               value: assistant.listening)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("STEVORA AI").font(.title2.bold()).foregroundStyle(Brand.light)
+                    Text(assistant.status).font(.caption).foregroundStyle(Brand.muted)
+                }
                 Spacer()
-            }.foregroundStyle(.cyan)
+                Button {
+                    Task { await assistant.inspect(address: model.address, token: model.token) }
+                } label: {
+                    Image(systemName: "arrow.clockwise").font(.headline)
+                }
+                .accessibilityLabel("Refresh STEVORA Assist")
+            }
+            .padding(18)
+            .modifier(StevoraGlassCard())
+
+            if let route = assistant.route {
+                HStack {
+                    Image(systemName: route.isAdmin ? "checkmark.shield.fill" : "person.crop.circle")
+                    Text(route.roleLabel)
+                    Spacer()
+                    Text(route.accountName).lineLimit(1)
+                }
+                .font(.caption.bold()).foregroundStyle(Brand.mint)
+                .padding(.horizontal, 12)
+            }
+            if let error = assistant.error {
+                Text(error).font(.footnote).foregroundStyle(.orange).padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .modifier(StevoraGlassCard())
+            }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(assist.messages) { item in
+                    LazyVStack(alignment: .leading, spacing: 13) {
+                        if assistant.messages.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Image("StevoraLogo").resizable().scaledToFit()
+                                    .frame(width: 74, height: 74)
+                                Text(model.localized("Твоят дом. Твоят интелект.",
+                                                     "Your home. Your intelligence."))
+                                    .font(.title3.bold())
+                                Text(model.localized("Асистентът се избира от сървъра според правата на акаунта.",
+                                                     "Your assistant is selected by your verified Home Hub role."))
+                                    .foregroundStyle(Brand.muted).font(.subheadline)
+                            }
+                            .padding(22)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .modifier(StevoraGlassCard())
+                        }
+                        ForEach(assistant.messages) { message in
                             HStack {
-                                if item.role == "user" { Spacer(minLength: 36) }
-                                Text(item.content)
-                                    .padding(14)
-                                    .background(item.role == "user" ? Color.cyan.opacity(0.24) : Color.white.opacity(0.09),
-                                                in: RoundedRectangle(cornerRadius: 16))
-                                if item.role != "user" { Spacer(minLength: 36) }
-                            }.id(item.id)
+                                if message.role == "user" { Spacer(minLength: 42) }
+                                Text(message.content)
+                                    .font(.body)
+                                    .foregroundStyle(Brand.light)
+                                    .padding(16)
+                                    .background(message.role == "user" ? Brand.cyan.opacity(0.27)
+                                                : Brand.raised.opacity(0.92),
+                                                in: RoundedRectangle(cornerRadius: 20))
+                                if message.role != "user" { Spacer(minLength: 42) }
+                            }
+                            .id(message.id)
+                            .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                                    removal: .opacity))
                         }
                     }
-                }.onChange(of: assist.messages.count) { _ in
-                    if let id = assist.messages.last?.id { withAnimation { proxy.scrollTo(id, anchor: .bottom) } }
+                    .padding(.vertical, 9)
+                    .animation(.spring(response: 0.38, dampingFraction: 0.84),
+                               value: assistant.messages.count)
+                }
+                .onChange(of: assistant.messages.count) { _ in
+                    if let last = assistant.messages.last {
+                        withAnimation(.easeOut(duration: 0.26)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
                 }
             }
-            if let error = assist.error { Text(error).font(.caption).foregroundStyle(.red) }
-            HStack {
-                TextField(model.localized("Попитай STEVORA...", "Ask STEVORA..."), text: $assist.draft, axis: .vertical)
-                    .lineLimit(1...4).textFieldStyle(.roundedBorder)
+            .frame(minHeight: 200)
+
+            HStack(alignment: .bottom, spacing: 11) {
+                TextField(model.localized("Попитай STEVORA...", "Ask STEVORA..."),
+                          text: $assistant.draft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .focused($composerFocused)
+                    .font(.body)
+                    .foregroundStyle(Brand.light)
+                    .padding(11)
                 Button {
-                    Task { await assist.startListening() }
+                    if assistant.listening {
+                        assistant.stopListening()
+                    } else {
+                        Task { await assistant.startListening() }
+                    }
                 } label: {
-                    Image(systemName: assist.listening ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.title2)
-                }.accessibilityLabel(assist.listening ? "Stop recording" : "Start recording")
+                    Image(systemName: assistant.listening ? "stop.circle.fill" : "mic.fill")
+                        .font(.title2).frame(width: 42, height: 44)
+                        .foregroundStyle(assistant.listening ? .orange : Brand.cyan)
+                }
+                .disabled(assistant.route == nil || assistant.busy)
+                .accessibilityLabel(assistant.listening ? "Stop recording" : "Start recording")
                 Button {
-                    Task { await assist.send(address: model.address, token: model.token) }
-                } label: { Image(systemName: "arrow.up.circle.fill").font(.title2) }
-                    .disabled(assist.busy || assist.draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if assistant.listening { assistant.stopListening() }
+                    composerFocused = false
+                    Task { await assistant.send(address: model.address, token: model.token) }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30)).frame(width: 42, height: 44)
+                        .foregroundStyle(Brand.cyan)
+                }
+                .disabled(assistant.busy || assistant.route == nil ||
+                          assistant.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .padding(9)
+            .modifier(StevoraGlassCard())
+            if assistant.busy { ProgressView().tint(Brand.cyan).frame(maxWidth: .infinity) }
         }
-        .padding(16)
-        .onDisappear { assist.stopListening() }
+        .task {
+            await assistant.inspect(address: model.address, token: model.token)
+        }
+        .onChange(of: model.token) { _ in
+            Task { await assistant.inspect(address: model.address, token: model.token) }
+        }
+        .onDisappear { assistant.stopListening() }
     }
 }
