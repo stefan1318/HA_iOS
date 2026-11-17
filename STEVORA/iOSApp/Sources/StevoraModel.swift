@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 final class StevoraModel: ObservableObject {
+    private let liveUpdates = StevoraLiveUpdates()
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
@@ -40,7 +41,18 @@ final class StevoraModel: ObservableObject {
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
             connected = true
+            liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
+                guard let self, self.connected else { return }
+                if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
+                    self.entities[index] = entity
+                } else {
+                    self.entities.append(entity)
+                }
+            }, onReconnect: { [weak self] in
+                await self?.refresh()
+            })
         } catch {
+            liveUpdates.stop()
             connected = false
             self.error = error.localizedDescription
         }
@@ -95,6 +107,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func logout() {
+        liveUpdates.stop()
         CredentialStore.delete(key: "access_token")
         token = ""
         connected = false
