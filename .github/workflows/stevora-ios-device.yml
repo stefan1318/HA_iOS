@@ -1,8 +1,14 @@
 name: STEVORA iOS device IPA (unsigned)
 
 # IPA builds are deliberate release/test candidates, not every source commit.
+# Updating this workflow triggers a fresh IPA build of the latest branch revision.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/stevora-ios
+    paths:
+      - '.github/workflows/stevora-ios-device.yml'
 
 concurrency:
   group: stevora-ios-device-${{ github.ref }}
