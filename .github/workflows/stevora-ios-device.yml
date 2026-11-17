@@ -1,13 +1,12 @@
 name: STEVORA iOS device IPA (unsigned)
 
+# IPA builds are deliberate release/test candidates, not every source commit.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/stevora-ios
-    paths:
-      - 'STEVORA/iOSApp/**'
-      - '.github/workflows/stevora-ios-device.yml'
+
+concurrency:
+  group: stevora-ios-device-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
