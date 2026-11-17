@@ -70,6 +70,7 @@ struct RootView: View {
 
 private struct StevoraOnboarding: View {
     @EnvironmentObject private var model: StevoraModel
+    @State private var showToken = false
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -88,8 +89,10 @@ private struct StevoraOnboarding: View {
                         TextField("https://your-home-hub.example", text: $model.address)
                             .textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
                             .textContentType(.URL)
-                        SecureField(model.localized("Токен за достъп", "Access token"), text: $model.token)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        DisclosureGroup(model.localized("Разширени настройки: тестов токен", "Advanced: test token"), isExpanded: $showToken) {
+                            SecureField(model.localized("Токен за достъп", "Access token"), text: $model.token)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        }
                         Text(model.localized("Избери защитен вход с акаунта си или токен за тестова инсталация.",
                                              "Use secure account sign-in or a token for development installs."))
                             .font(.caption).foregroundStyle(Brand.muted)
@@ -204,6 +207,7 @@ private struct StevoraDashboard: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 16)
+                        .padding(.bottom, 95)
                     }
                     .background(StevoraBackdrop())
                     .toolbar {
@@ -514,10 +518,10 @@ private struct StevoraDeviceCard: View {
                     Text(model.localized("Зададена", "Target") + ": \(Int(target))°C")
                         .font(.subheadline)
                     Spacer()
-                    Button { Task { await model.setTemperature(entity, value: target - 1) } } label: {
+                    Button { Task { await model.setTemperature(entity, value: max(entity.attributes.min_temp ?? 7, target - 1)) } } label: {
                         Image(systemName: "minus.circle.fill").font(.title2)
                     }
-                    Button { Task { await model.setTemperature(entity, value: target + 1) } } label: {
+                    Button { Task { await model.setTemperature(entity, value: min(entity.attributes.max_temp ?? 35, target + 1)) } } label: {
                         Image(systemName: "plus.circle.fill").font(.title2)
                     }
                 }.foregroundStyle(Brand.cyan)
@@ -529,7 +533,14 @@ private struct StevoraDeviceCard: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack {
                                 ForEach(modes, id: \.self) { mode in
-                                    Button(mode) { Task { await model.setClimateMode(entity, mode: mode) } }
+                                    Button(model.localized([
+                                        "off": "Изключен", "heat": "Отопление",
+                                        "cool": "Охлаждане", "dry": "Изсушаване",
+                                        "fan_only": "Вентилатор", "auto": "Автоматично",
+                                        "heat_cool": "Автоматичен климат"
+                                    ][mode] ?? mode, mode)) {
+                                        Task { await model.setClimateMode(entity, mode: mode) }
+                                    }
                                         .buttonStyle(.bordered)
                                         .tint(entity.state == mode ? Brand.cyan : Brand.muted)
                                 }
@@ -557,7 +568,7 @@ private struct StevoraDeviceCard: View {
                     }.pickerStyle(.menu)
                 }
             }
-            if entity.domain == "light" && entity.state == "on" {
+            if entity.domain == "light" {
                 Button {
                     withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
                 } label: {
@@ -618,9 +629,14 @@ private struct StevoraDeviceCard: View {
         }
         .padding(19)
         .modifier(StevoraGlassCard())
-        .onAppear { updateBrightness() }
+        .onAppear { updateBrightness(); updateRGB() }
         .onChange(of: entity.attributes.brightness) { _ in updateBrightness() }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: expanded)
+    }
+    private func updateRGB() {
+        if let rgb = entity.attributes.rgb_color, rgb.count == 3 {
+            red = Double(rgb[0]); green = Double(rgb[1]); blue = Double(rgb[2])
+        }
     }
     private func updateBrightness() {
         if let level = entity.attributes.brightness {
