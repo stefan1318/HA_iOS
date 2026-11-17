@@ -159,13 +159,6 @@ private struct DashboardView: View {
             }
         }
         .tint(StevoraStyle.accent)
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 20_000_000_000)
-                if Task.isCancelled { break }
-                await model.refresh()
-            }
-        }
     }
 
     private var header: some View {
