@@ -10,12 +10,11 @@
                         <viewLayoutGuide key="safeArea" id="safe"/>
                         <color key="backgroundColor" red="0.035" green="0.055" blue="0.09" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <subviews>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" text="STEVORA" textAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="title">
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="42"/>
-                                <color key="textColor" red="0.22" green="0.82" blue="0.91" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                            </label>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="StevoraLogo" translatesAutoresizingMaskIntoConstraints="NO" id="title"/>
                         </subviews>
                         <constraints>
+                            <constraint firstItem="title" firstAttribute="width" constant="184" id="logoWidth"/>
+                            <constraint firstItem="title" firstAttribute="height" constant="184" id="logoHeight"/>
                             <constraint firstItem="title" firstAttribute="centerX" secondItem="view" secondAttribute="centerX" id="centerX"/>
                             <constraint firstItem="title" firstAttribute="centerY" secondItem="view" secondAttribute="centerY" id="centerY"/>
                         </constraints>
@@ -25,4 +24,7 @@
             </objects>
         </scene>
     </scenes>
+    <resources>
+        <image name="StevoraLogo" width="512" height="512"/>
+    </resources>
 </document>
