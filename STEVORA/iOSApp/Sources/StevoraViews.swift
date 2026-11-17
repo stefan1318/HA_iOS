@@ -86,7 +86,7 @@ private struct OnboardingView: View {
 }
 
 private enum Screen: String, CaseIterable {
-    case home, rooms, climate, lights, settings
+    case home, rooms, climate, lights, routines, settings
     @MainActor
     func label(_ model: StevoraModel) -> String {
         switch self {
@@ -94,6 +94,7 @@ private enum Screen: String, CaseIterable {
         case .rooms: model.localized("Устройства", "Devices")
         case .climate: model.localized("Климат", "Climate")
         case .lights: model.localized("Светлини", "Lights")
+        case .routines: model.localized("Сцени", "Scenes")
         case .settings: model.localized("Настройки", "Settings")
         }
     }
@@ -103,6 +104,7 @@ private enum Screen: String, CaseIterable {
         case .rooms: "square.grid.2x2.fill"
         case .climate: "thermometer.medium"
         case .lights: "lightbulb.fill"
+        case .routines: "play.square.stack.fill"
         case .settings: "gearshape.fill"
         }
     }
@@ -157,6 +159,13 @@ private struct DashboardView: View {
             }
         }
         .tint(StevoraStyle.accent)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                if Task.isCancelled { break }
+                await model.refresh()
+            }
+        }
     }
 
     private var header: some View {
@@ -188,6 +197,7 @@ private struct DashboardView: View {
                   $0.id.localizedCaseInsensitiveContains("humudity")))
             }
         case .lights: return model.entities.filter { $0.domain == "light" }
+        case .routines: return model.entities.filter { ["scene", "script", "automation"].contains($0.domain) }
         case .settings: return []
         }
     }
@@ -232,6 +242,12 @@ private struct DeviceTile: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if ["scene", "script", "automation"].contains(entity.domain) {
+                    Button {
+                        Task { await model.runRoutine(entity) }
+                    } label: { Image(systemName: "play.circle.fill").font(.title2) }
+                    .accessibilityLabel(model.localized("Стартирай", "Run"))
+                }
                 if ["light", "switch", "fan"].contains(entity.domain) {
                     Button {
                         Task { await model.toggle(entity) }
@@ -280,6 +296,7 @@ private struct DeviceTile: View {
         case "climate": "thermometer.medium"
         case "switch": "switch.2"
         case "fan": "fanblades"
+        case "scene", "script", "automation": "play.square.stack"
         default: "waveform.path.ecg"
         }
     }
