@@ -472,6 +472,9 @@ private struct StevoraDeviceCard: View {
     let name: String
     @State private var expanded = false
     @State private var brightness = 50.0
+    @State private var red = 255.0
+    @State private var green = 100.0
+    @State private var blue = 100.0
 
     private var symbol: String {
         switch entity.domain {
@@ -519,6 +522,41 @@ private struct StevoraDeviceCard: View {
                     }
                 }.foregroundStyle(Brand.cyan)
             }
+            if entity.domain == "climate" {
+                if let modes = entity.attributes.hvac_modes, !modes.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(modes, id: \.self) { mode in
+                                    Button(mode) { Task { await model.setClimateMode(entity, mode: mode) } }
+                                        .buttonStyle(.bordered)
+                                        .tint(entity.state == mode ? Brand.cyan : Brand.muted)
+                                }
+                            }
+                        }
+                    }
+                }
+                if let modes = entity.attributes.fan_modes, !modes.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(model.localized("Вентилатор", "Fan speed")).font(.caption).foregroundStyle(Brand.muted)
+                        Picker("Fan", selection: Binding(
+                            get: { entity.attributes.fan_mode ?? modes[0] },
+                            set: { value in Task { await model.setFanMode(entity, mode: value) } }
+                        )) {
+                            ForEach(modes, id: \.self) { Text($0).tag($0) }
+                        }.pickerStyle(.menu)
+                    }
+                }
+                if let presets = entity.attributes.preset_modes, !presets.isEmpty {
+                    Picker("Preset", selection: Binding(
+                        get: { entity.attributes.preset_mode ?? presets[0] },
+                        set: { value in Task { await model.setPresetMode(entity, mode: value) } }
+                    )) {
+                        ForEach(presets, id: \.self) { Text($0).tag($0) }
+                    }.pickerStyle(.menu)
+                }
+            }
             if entity.domain == "light" && entity.state == "on" {
                 Button {
                     withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
@@ -536,6 +574,36 @@ private struct StevoraDeviceCard: View {
                             if !editing { Task { await model.setBrightness(entity, value: brightness) } }
                         }
                         Image(systemName: "sun.max").foregroundStyle(Brand.cyan)
+                    }
+                    if entity.attributes.supported_color_modes?.contains(where: {
+                        ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0)
+                    }) == true || entity.id == "light.rgb_cct" {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(model.localized("RGB цвят", "RGB color")).font(.caption)
+                            HStack {
+                                Text("R").foregroundStyle(.red)
+                                Slider(value: $red, in: 0...255, step: 1)
+                            }
+                            HStack {
+                                Text("G").foregroundStyle(.green)
+                                Slider(value: $green, in: 0...255, step: 1)
+                            }
+                            HStack {
+                                Text("B").foregroundStyle(.blue)
+                                Slider(value: $blue, in: 0...255, step: 1)
+                            }
+                            Button(model.localized("Приложи цвят", "Apply color")) {
+                                Task { await model.setColor(entity, rgb: [Int(red), Int(green), Int(blue)]) }
+                            }.buttonStyle(.borderedProminent)
+                        }
+                    }
+                    if let effects = entity.attributes.effect_list, !effects.isEmpty {
+                        Picker("Effect", selection: Binding(
+                            get: { entity.attributes.effect ?? effects[0] },
+                            set: { value in Task { await model.setLightEffect(entity, effect: value) } }
+                        )) {
+                            ForEach(effects, id: \.self) { Text($0).tag($0) }
+                        }.pickerStyle(.menu)
                     }
                     if entity.id == "light.rgb_cct" {
                         HStack(spacing: 13) {
