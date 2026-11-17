@@ -80,6 +80,15 @@ final class StevoraModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
+    func runRoutine(_ entity: HAEntity) async {
+        guard ["scene", "script", "automation"].contains(entity.domain) else { return }
+        do {
+            let action = entity.domain == "automation" ? "trigger" : "turn_on"
+            try await client().service(domain: entity.domain, action: action, entityID: entity.id)
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
     func setLanguage(_ newValue: String) {
         language = newValue
         UserDefaults.standard.set(newValue, forKey: "stevora.language")
