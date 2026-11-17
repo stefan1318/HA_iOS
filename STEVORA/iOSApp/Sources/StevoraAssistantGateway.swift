@@ -12,7 +12,7 @@ struct StevoraAssistantRoute {
 }
 
 enum StevoraAssistantError: LocalizedError {
-    case disconnected, authentication, invalidResponse, noMatchingPipeline(String), ambiguousPipeline(String)
+    case disconnected, authentication, invalidResponse, routeChanged, noMatchingPipeline(String), ambiguousPipeline(String)
     case remote(String)
 
     var errorDescription: String? {
@@ -20,6 +20,7 @@ enum StevoraAssistantError: LocalizedError {
         case .disconnected: return "No secure STEVORA Home Hub connection."
         case .authentication: return "Unable to authenticate the current Home Hub account."
         case .invalidResponse: return "Invalid Assist pipeline response from Home Hub."
+        case .routeChanged: return "Account or Assist pipeline changed. Refresh the assistant before sending."
         case .noMatchingPipeline(let agent): return "No Assist pipeline configured for \(agent). Check Home Assistant settings."
         case .ambiguousPipeline(let agent): return "Multiple Assist pipelines use \(agent). Select one in Home Assistant."
         case .remote(let message): return message
@@ -140,10 +141,11 @@ actor StevoraAssistantGateway {
         return try await verifiedRoute()
     }
 
-    func converse(text: String, conversationID: String?) async throws -> (String, String?, StevoraAssistantRoute) {
+    func converse(text: String, conversationID: String?, expectedPipelineID: String) async throws -> (String, String?, StevoraAssistantRoute) {
         try await connect()
         defer { disconnect() }
         let route = try await verifiedRoute()
+        guard route.pipelineID == expectedPipelineID else { throw StevoraAssistantError.routeChanged }
         nextID += 1
         let identifier = nextID
         var command: [String: Any] = [
