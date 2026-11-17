@@ -44,7 +44,9 @@ final class StevoraAssistModel: ObservableObject {
             }
         }
         guard speechPermission else { error = "Speech recognition permission required"; return }
-        let microphone = await AVAudioApplication.requestRecordPermission()
+        let microphone = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in continuation.resume(returning: granted) }
+        }
         guard microphone else { error = "Microphone permission required"; return }
         do {
             let session = AVAudioSession.sharedInstance()
