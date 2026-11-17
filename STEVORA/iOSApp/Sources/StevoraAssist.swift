@@ -59,7 +59,8 @@ final class StevoraAssistModel: ObservableObject {
         do {
             let (answer, newID, verified) = try await StevoraAssistantGateway(
                 address: address, token: token
-            ).converse(text: message, conversationID: conversationID)
+            ).converse(text: message, conversationID: conversationID,
+                       expectedPipelineID: selectedPipelineID ?? "")
             // The session is reverified server-side on every command.
             if let previous = selectedPipelineID, previous != verified.pipelineID {
                 conversationID = nil
