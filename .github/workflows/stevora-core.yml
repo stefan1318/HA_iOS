@@ -13,6 +13,11 @@ on:
       - 'STEVORA/**'
       - '.github/workflows/stevora-core.yml'
 
+# Only the latest core check for a branch or PR needs to complete.
+concurrency:
+  group: stevora-core-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
