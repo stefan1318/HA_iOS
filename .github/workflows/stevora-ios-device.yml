@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: stevora-ios-device-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -32,6 +32,12 @@ jobs:
       - name: Generate STEVORA icon
         run: |
           swift STEVORA/iOSApp/Branding/generate-icon.swift STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+      - name: Validate STEVORA brand and storyboard
+        run: |
+          test -s STEVORA/iOSApp/Branding/stevora-logo.png
+          test -s STEVORA/iOSApp/Assets.xcassets/StevoraLogo.imageset/stevora-logo.png
+          sips -g pixelWidth -g pixelHeight STEVORA/iOSApp/Branding/stevora-logo.png
+          plutil -lint STEVORA/iOSApp/Branding/LaunchScreen.storyboard
       - name: Generate project
         run: |
           cd STEVORA/iOSApp
@@ -51,6 +57,12 @@ jobs:
           cd /tmp/stevora-payload
           /usr/bin/zip -qry /tmp/STEVORA-iOS-unsigned.ipa Payload
           test -s /tmp/STEVORA-iOS-unsigned.ipa
+      - name: Summarize compiler errors
+        if: failure()
+        run: |
+          if [ -f /tmp/stevora-device-build.log ]; then
+            grep -nE 'error:|warning:|BUILD FAILED|fatal error:' /tmp/stevora-device-build.log | tail -100 || true
+          fi
       - name: Upload device build log
         if: always()
         uses: actions/upload-artifact@v4
