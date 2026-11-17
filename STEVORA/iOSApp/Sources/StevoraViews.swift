@@ -125,8 +125,9 @@ private struct DashboardView: View {
                             } else {
                                 let items = filtered(screen)
                                 if items.isEmpty {
-                                    ContentUnavailableView(model.localized("Няма налични устройства", "No devices available"),
-                                                           systemImage: screen.symbol)
+                                    Label(model.localized("Няма налични устройства", "No devices available"), systemImage: screen.symbol)
+                                        .foregroundStyle(.secondary)
+                                        .padding(20)
                                 } else {
                                     LazyVStack(spacing: 12) {
                                         ForEach(items) { entity in
