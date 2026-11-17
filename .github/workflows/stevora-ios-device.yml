@@ -37,7 +37,7 @@ jobs:
           test -s STEVORA/iOSApp/Branding/stevora-logo.png
           test -s STEVORA/iOSApp/Assets.xcassets/StevoraLogo.imageset/stevora-logo.png
           sips -g pixelWidth -g pixelHeight STEVORA/iOSApp/Branding/stevora-logo.png
-          plutil -lint STEVORA/iOSApp/Branding/LaunchScreen.storyboard
+          python3 -c 'import xml.etree.ElementTree as ET; ET.parse("STEVORA/iOSApp/Branding/LaunchScreen.storyboard")'
       - name: Generate project
         run: |
           cd STEVORA/iOSApp
