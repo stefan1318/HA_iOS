@@ -4,6 +4,10 @@ import SwiftUI
 @MainActor
 final class StevoraModel: ObservableObject {
     private let liveUpdates = StevoraLiveUpdates()
+    private let oauth = StevoraOAuth()
+    @Published var isOAuthSession = false
+    @Published var selectedRoom = "all"
+    @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "stevora.favorites") ?? [])
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
@@ -16,6 +20,7 @@ final class StevoraModel: ObservableObject {
     init() {
         if let saved = CredentialStore.read(key: "access_token"), !address.isEmpty {
             token = saved
+            isOAuthSession = CredentialStore.read(key: "refresh_token") != nil
             Task { await connect(persist: false) }
         }
     }
@@ -26,14 +31,55 @@ final class StevoraModel: ObservableObject {
         try HAClient(address: address, token: token)
     }
 
+    func signIn() async {
+        guard !busy else { return }
+        busy = true
+        error = nil
+        defer { busy = false }
+        do {
+            let url = try HAClient(address: address, token: "temporary").baseURL
+            let auth = try await oauth.authorizationCode(server: url)
+            let tokens = try await StevoraTokenAPI.exchange(server: url, code: auth.code, verifier: auth.verifier)
+            guard CredentialStore.save(tokens.access_token, key: "access_token") else { throw HAError.unexpectedResponse }
+            if let refresh = tokens.refresh_token {
+                guard CredentialStore.save(refresh, key: "refresh_token") else { throw HAError.unexpectedResponse }
+            }
+            token = tokens.access_token
+            isOAuthSession = true
+            UserDefaults.standard.set(address, forKey: "stevora.address")
+        } catch {
+            self.error = error.localizedDescription
+            return
+        }
+        busy = false
+        await connect(persist: false)
+    }
+
+    func toggleFavorite(_ id: String) {
+        if favorites.contains(id) { favorites.remove(id) } else { favorites.insert(id) }
+        UserDefaults.standard.set(Array(favorites), forKey: "stevora.favorites")
+    }
+
     func connect(persist: Bool = true) async {
         guard !busy else { return }
         busy = true
         error = nil
         defer { busy = false }
         do {
-            let api = try client()
-            try await api.check()
+            var api = try client()
+            do {
+                try await api.check()
+            } catch HAError.unauthorized {
+                guard let refresh = CredentialStore.read(key: "refresh_token") else { throw HAError.unauthorized }
+                let renewed = try await StevoraTokenAPI.refresh(server: api.baseURL, token: refresh)
+                guard CredentialStore.save(renewed.access_token, key: "access_token") else { throw HAError.unexpectedResponse }
+                if let next = renewed.refresh_token {
+                    guard CredentialStore.save(next, key: "refresh_token") else { throw HAError.unexpectedResponse }
+                }
+                token = renewed.access_token
+                api = try client()
+                try await api.check()
+            }
             let loaded = try await api.states()
             if persist && !CredentialStore.save(token, key: "access_token") {
                 throw NSError(domain: "STEVORA", code: 1,
@@ -114,6 +160,8 @@ final class StevoraModel: ObservableObject {
     func logout() {
         liveUpdates.stop()
         CredentialStore.delete(key: "access_token")
+        CredentialStore.delete(key: "refresh_token")
+        isOAuthSession = false
         token = ""
         connected = false
         liveConnected = false
