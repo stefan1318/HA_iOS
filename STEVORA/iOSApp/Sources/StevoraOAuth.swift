@@ -2,6 +2,7 @@ import Foundation
 import AuthenticationServices
 import CryptoKit
 import UIKit
+import Security
 
 /// Home Assistant authorization-code flow with PKCE. No user password enters STEVORA.
 @MainActor
