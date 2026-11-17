@@ -143,6 +143,16 @@ final class StevoraModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
+    func setColor(_ entity: HAEntity, rgb: [Int]) async {
+        guard entity.id == "light.rgb_cct", rgb.count == 3,
+              rgb.allSatisfy({ (0...255).contains($0) }) else { return }
+        do {
+            try await client().service(domain: "light", action: "turn_on",
+                                       entityID: entity.id, extra: ["rgb_color": rgb])
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
     func runRoutine(_ entity: HAEntity) async {
         guard ["scene", "script", "automation"].contains(entity.domain) else { return }
         do {
