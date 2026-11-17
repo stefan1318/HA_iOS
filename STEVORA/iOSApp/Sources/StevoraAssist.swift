@@ -14,6 +14,8 @@ final class StevoraAssistModel: ObservableObject {
     @Published var draft = ""
     @Published var busy = false
     @Published var listening = false
+    @Published var voiceReplies = true
+    private let speaker = AVSpeechSynthesizer()
     @Published var error: String?
     @Published var route: StevoraAssistantRoute?
     @Published var status = "Checking account and Assist pipelines…"
@@ -75,6 +77,7 @@ final class StevoraAssistModel: ObservableObject {
             route = verified
             status = "\(verified.pipelineName) • \(verified.roleLabel)"
             messages.append(StevoraMessage(role: "assistant", content: answer))
+            if voiceReplies { speak(answer) }
         } catch {
             route = nil
             selectedPipelineID = nil
@@ -84,8 +87,20 @@ final class StevoraAssistModel: ObservableObject {
         }
     }
 
+    private func speak(_ text: String) {
+        let plain = text.replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "###", with: "")
+        let utterance = AVSpeechUtterance(string: plain)
+        utterance.voice = AVSpeechSynthesisVoice(language: "bg-BG")
+        utterance.rate = 0.48
+        speaker.stopSpeaking(at: .immediate)
+        speaker.speak(utterance)
+    }
+
     func startListening() async {
         guard route != nil else { error = "Verify account and Assist pipeline first"; return }
+        guard recognizer?.isAvailable == true else { error = "Speech recognition is not available on this device or language."; return }
+        speaker.stopSpeaking(at: .immediate)
         guard !listening else { stopListening(); return }
         let authorized = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             SFSpeechRecognizer.requestAuthorization { status in
@@ -112,9 +127,17 @@ final class StevoraAssistModel: ObservableObject {
             audioEngine.prepare()
             try audioEngine.start()
             listening = true
-            recognition = recognizer?.recognitionTask(with: request) { [weak self] result, _ in
-                guard let result else { return }
-                Task { @MainActor in self?.draft = result.bestTranscription.formattedString }
+            recognition = recognizer?.recognitionTask(with: request) { [weak self] result, recognitionError in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let result {
+                        self.draft = result.bestTranscription.formattedString
+                        if result.isFinal { self.stopListening() }
+                    } else if let recognitionError {
+                        self.error = recognitionError.localizedDescription
+                        self.stopListening()
+                    }
+                }
             }
         } catch {
             stopListening()
@@ -202,7 +225,7 @@ struct StevoraAssistView: View {
                         ForEach(assistant.messages) { message in
                             HStack {
                                 if message.role == "user" { Spacer(minLength: 42) }
-                                Text(message.content)
+                                Text((try? AttributedString(markdown: message.content)) ?? AttributedString(message.content))
                                     .font(.body)
                                     .foregroundStyle(Brand.light)
                                     .padding(16)
@@ -265,6 +288,8 @@ struct StevoraAssistView: View {
             }
             .padding(9)
             .modifier(StevoraGlassCard())
+            Toggle(model.localized("Гласови отговори", "Spoken replies"), isOn: $assistant.voiceReplies)
+                .font(.caption).tint(Brand.cyan)
             if assistant.busy { ProgressView().tint(Brand.cyan).frame(maxWidth: .infinity) }
         }
         .task {
