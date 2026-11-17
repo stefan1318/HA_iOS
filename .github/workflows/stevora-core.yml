@@ -1,0 +1,28 @@
+name: STEVORA iOS core checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/stevora-ios
+    paths:
+      - 'STEVORA/**'
+      - '.github/workflows/stevora-core.yml'
+  pull_request:
+    paths:
+      - 'STEVORA/**'
+      - '.github/workflows/stevora-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  swift-core-tests:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test STEVORA core package
+        run: swift test --package-path STEVORA
