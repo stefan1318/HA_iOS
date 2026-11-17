@@ -97,7 +97,8 @@ struct HAClient {
     }
 
     func states() async throws -> [HAEntity] {
-        try JSONDecoder().decode([HAEntity].self, from: request("/api/states"))
+        let data = try await request("/api/states")
+        return try JSONDecoder().decode([HAEntity].self, from: data)
     }
 
     func service(domain: String, action: String, entityID: String, extra: [String: Any] = [:]) async throws {
