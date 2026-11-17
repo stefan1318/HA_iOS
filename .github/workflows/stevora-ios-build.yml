@@ -18,10 +18,20 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Diagnose Xcode environment
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          swift --version
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
+          xcodegen --version
       - name: Generate STEVORA Xcode project
-        run: xcodegen generate --spec STEVORA/iOSApp/project.yml --project STEVORA/iOSApp
+        run: |
+          cd STEVORA/iOSApp
+          xcodegen generate --spec project.yml
+          test -f StevoraCompanion.xcodeproj/project.pbxproj
       - name: Build unsigned iOS Simulator app
         run: |
           set -o pipefail
@@ -31,7 +41,14 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath /tmp/stevora-derived \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee /tmp/stevora-xcodebuild.log
+      - name: Upload diagnostic build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevora-ios-build-log
+          path: /tmp/stevora-xcodebuild.log
+          if-no-files-found: ignore
       - name: Upload simulator application
         uses: actions/upload-artifact@v4
         with:
