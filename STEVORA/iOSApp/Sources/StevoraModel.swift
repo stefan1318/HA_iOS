@@ -134,6 +134,46 @@ final class StevoraModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
+    func setClimateMode(_ entity: HAEntity, mode: String) async {
+        guard entity.domain == "climate",
+              entity.attributes.hvac_modes?.contains(mode) == true else { return }
+        do {
+            try await client().service(domain: "climate", action: "set_hvac_mode",
+                                       entityID: entity.id, extra: ["hvac_mode": mode])
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func setFanMode(_ entity: HAEntity, mode: String) async {
+        guard entity.domain == "climate",
+              entity.attributes.fan_modes?.contains(mode) == true else { return }
+        do {
+            try await client().service(domain: "climate", action: "set_fan_mode",
+                                       entityID: entity.id, extra: ["fan_mode": mode])
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func setPresetMode(_ entity: HAEntity, mode: String) async {
+        guard entity.domain == "climate",
+              entity.attributes.preset_modes?.contains(mode) == true else { return }
+        do {
+            try await client().service(domain: "climate", action: "set_preset_mode",
+                                       entityID: entity.id, extra: ["preset_mode": mode])
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func setLightEffect(_ entity: HAEntity, effect: String) async {
+        guard entity.domain == "light",
+              entity.attributes.effect_list?.contains(effect) == true else { return }
+        do {
+            try await client().service(domain: "light", action: "turn_on",
+                                       entityID: entity.id, extra: ["effect": effect])
+            await refresh()
+        } catch { self.error = error.localizedDescription }
+    }
+
     func setBrightness(_ entity: HAEntity, value: Double) async {
         guard entity.domain == "light" else { return }
         do {
@@ -144,7 +184,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setColor(_ entity: HAEntity, rgb: [Int]) async {
-        guard entity.id == "light.rgb_cct", rgb.count == 3,
+        guard entity.domain == "light", rgb.count == 3,
               rgb.allSatisfy({ (0...255).contains($0) }) else { return }
         do {
             try await client().service(domain: "light", action: "turn_on",
