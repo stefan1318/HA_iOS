@@ -1,174 +1,214 @@
 import SwiftUI
 
-private enum StevoraStyle {
-    static let background = Color(red: 0.035, green: 0.055, blue: 0.09)
-    static let panel = Color(red: 0.085, green: 0.12, blue: 0.18)
-    static let accent = Color(red: 0.22, green: 0.82, blue: 0.91)
+// Native STEVORA iOS 26 design, sharing layout and semantic tokens with Android 2.1.
+private enum Brand {
+    static let background = Color(red: 8/255, green: 19/255, blue: 31/255)
+    static let surface = Color(red: 18/255, green: 36/255, blue: 55/255)
+    static let raised = Color(red: 25/255, green: 49/255, blue: 71/255)
+    static let cyan = Color(red: 39/255, green: 185/255, blue: 245/255)
+    static let light = Color(red: 244/255, green: 250/255, blue: 255/255)
+    static let muted = Color(red: 166/255, green: 188/255, blue: 205/255)
+    static let mint = Color(red: 76/255, green: 224/255, blue: 179/255)
+    static let border = Color(red: 41/255, green: 69/255, blue: 90/255)
+}
+
+private struct StevoraGlassCard: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .background(Brand.surface.opacity(0.43), in: RoundedRectangle(cornerRadius: 24))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        } else {
+            content
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(Brand.border, lineWidth: 1))
+        }
+    }
+}
+
+private struct StevoraTouchStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.76 : 1)
+            .animation(.spring(response: 0.27, dampingFraction: 0.68), value: configuration.isPressed)
+    }
+}
+
+private struct StevoraBackdrop: View {
+    @State private var glow = false
+    var body: some View {
+        ZStack {
+            Brand.background
+            LinearGradient(
+                colors: [Brand.raised.opacity(0.75), Brand.background, Color(red: 0.02, green: 0.045, blue: 0.09)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            Circle()
+                .fill(Brand.cyan.opacity(glow ? 0.14 : 0.035))
+                .frame(width: 430, height: 430)
+                .blur(radius: 100)
+                .offset(x: glow ? 110 : -120, y: -240)
+                .animation(.easeInOut(duration: 7).repeatForever(autoreverses: true), value: glow)
+        }
+        .ignoresSafeArea()
+        .onAppear { glow = true }
+    }
 }
 
 struct RootView: View {
     @EnvironmentObject private var model: StevoraModel
-
     var body: some View {
         Group {
-            if model.connected {
-                DashboardView()
-            } else {
-                OnboardingView()
-            }
+            if model.connected { StevoraDashboard() }
+            else { StevoraOnboarding() }
         }
-        .background(StevoraStyle.background.ignoresSafeArea())
-        .tint(StevoraStyle.accent)
+        .preferredColorScheme(.dark)
+        .tint(Brand.cyan)
     }
 }
 
-private struct OnboardingView: View {
+private struct StevoraOnboarding: View {
     @EnvironmentObject private var model: StevoraModel
-
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    Spacer(minLength: 32)
+                VStack(alignment: .leading, spacing: 19) {
+                    Image("StevoraLogo").resizable().scaledToFit()
+                        .frame(width: 112, height: 112)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 38)
                     Text("STEVORA")
-                        .font(.system(size: 43, weight: .black, design: .rounded))
+                        .font(.system(size: 35, weight: .black, design: .rounded))
                         .tracking(4)
-                        .foregroundStyle(StevoraStyle.accent)
-                    Text(model.localized("Интелигентен дом, изцяло под твой контрол",
-                                         "Your smart home, in your control"))
-                        .font(.headline)
-                    Text(model.localized("Свържи своя Home Assistant сървър",
-                                         "Connect your Home Assistant server"))
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 14) {
-                        TextField("https://your-server.example", text: $model.address)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.URL)
-                            .autocorrectionDisabled()
+                        .foregroundStyle(Brand.light)
+                    Text(model.localized("Твоят дом. Твоят интелект.", "Your home. Your intelligence."))
+                        .font(.headline).foregroundStyle(Brand.cyan)
+                    VStack(alignment: .leading, spacing: 15) {
+                        TextField("https://your-home-hub.example", text: $model.address)
+                            .textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
                             .textContentType(.URL)
-                            .accessibilityLabel("Server URL")
-                        SecureField(model.localized("Дългосрочен токен за достъп",
-                                                     "Long-lived access token"), text: $model.token)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        Text(model.localized("За първоначалните тестове използвай токен от профила си в Home Assistant. Той се пази в iOS Keychain. Преди публична версия ще бъде заменен с OAuth onboarding.",
-                                             "For development, use a Home Assistant profile access token. It is stored in iOS Keychain. OAuth onboarding is required before public release."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        SecureField(model.localized("Токен за достъп", "Access token"), text: $model.token)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Text(model.localized("Избери защитен вход с акаунта си или токен за тестова инсталация.",
+                                             "Use secure account sign-in or a token for development installs."))
+                            .font(.caption).foregroundStyle(Brand.muted)
                     }
-                    .padding(20)
-                    .background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 20))
+                    .padding(20).modifier(StevoraGlassCard())
                     Button {
                         Task { await model.signIn() }
                     } label: {
-                        HStack {
-                            Spacer()
-                            if model.busy { ProgressView().tint(.black) }
-                            Label(model.localized("Вход със STEVORA", "Sign in to STEVORA"), systemImage: "lock.shield")
-                                .fontWeight(.bold)
-                            Spacer()
-                        }.padding(14)
+                        Label(model.localized("Вход в STEVORA", "Sign in to STEVORA"), systemImage: "lock.shield")
+                            .fontWeight(.bold).frame(maxWidth: .infinity).padding(15)
+                            .background(Brand.cyan, in: RoundedRectangle(cornerRadius: 17))
+                            .foregroundStyle(Brand.background)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(StevoraStyle.accent)
-                    .foregroundStyle(.black)
-                    .disabled(model.busy || model.address.isEmpty)
+                    .buttonStyle(StevoraTouchStyle()).disabled(model.busy || model.address.isEmpty)
                     Button {
                         Task { await model.connect() }
                     } label: {
-                        HStack {
-                            Spacer()
-                            if model.busy { ProgressView().tint(.black) }
-                            Text(model.localized("Свържи STEVORA", "Connect STEVORA"))
-                                .fontWeight(.bold)
-                            Spacer()
-                        }
-                        .padding(14)
+                        Text(model.localized("Свържи с токен", "Connect with token"))
+                            .frame(maxWidth: .infinity).padding(13)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(StevoraStyle.accent)
-                    .foregroundStyle(.black)
-                    .disabled(model.busy || model.token.isEmpty || model.address.isEmpty)
-                    if let error = model.error {
-                        Text(error).foregroundStyle(.red).font(.footnote)
-                    }
-                }
-                .padding(24)
+                    .disabled(model.busy || model.address.isEmpty || model.token.isEmpty)
+                    if model.busy { ProgressView().tint(Brand.cyan).frame(maxWidth: .infinity) }
+                    if let error = model.error { Text(error).foregroundStyle(.red).font(.footnote) }
+                }.padding(23)
             }
-            .background(StevoraStyle.background)
+            .background(StevoraBackdrop())
         }
     }
 }
 
-private enum Screen: String, CaseIterable {
-    case home, rooms, climate, lights, routines, assist, settings
-    @MainActor
-    func label(_ model: StevoraModel) -> String {
-        switch self {
-        case .home: model.localized("Начало", "Home")
-        case .rooms: model.localized("Устройства", "Devices")
-        case .climate: model.localized("Климат", "Climate")
-        case .lights: model.localized("Светлини", "Lights")
-        case .routines: model.localized("Сцени", "Scenes")
-        case .assist: "Assist"
-        case .settings: model.localized("Настройки", "Settings")
-        }
-    }
-    var symbol: String {
+private enum StevoraTab: String, CaseIterable {
+    case home, rooms, climate, assistant, more
+    var icon: String {
         switch self {
         case .home: "house.fill"
         case .rooms: "square.grid.2x2.fill"
         case .climate: "thermometer.medium"
-        case .lights: "lightbulb.fill"
-        case .routines: "play.square.stack.fill"
-        case .assist: "waveform.circle.fill"
-        case .settings: "gearshape.fill"
+        case .assistant: "waveform.circle.fill"
+        case .more: "ellipsis.circle.fill"
+        }
+    }
+    @MainActor
+    func label(_ model: StevoraModel) -> String {
+        switch self {
+        case .home: model.localized("Начало", "Home")
+        case .rooms: model.localized("Помещения", "Rooms")
+        case .climate: model.localized("Климат", "Climate")
+        case .assistant: "STEVORA AI"
+        case .more: model.localized("Още", "More")
         }
     }
 }
 
-private struct DashboardView: View {
+private struct StevoraControl: Identifiable {
+    let id: String
+    let room: String
+    let bg: String
+    let en: String
+    var name: String { bg }
+}
+
+private let roomOrder = ["living", "kitchen", "hall", "bathroom", "terrace"]
+private let panelControls: [StevoraControl] = [
+    .init(id: "climate.air_conditioner", room: "living", bg: "Климатик", en: "Air conditioner"),
+    .init(id: "light.rgb_cct", room: "living", bg: "LED лента", en: "LED strip"),
+    .init(id: "media_player.living_room_tv_2", room: "living", bg: "Телевизор", en: "Living Room TV"),
+    .init(id: "light.living_room_switch_1", room: "living", bg: "Лява светлина", en: "Left light"),
+    .init(id: "light.living_room_switch_2", room: "living", bg: "Средна светлина", en: "Middle light"),
+    .init(id: "light.living_room_switch_3", room: "living", bg: "Дясна светлина", en: "Right light"),
+    .init(id: "light.wifi_bel_2gang_switch_2", room: "kitchen", bg: "Осветление", en: "Kitchen light"),
+    .init(id: "light.terrace_switch_1", room: "hall", bg: "Осветление", en: "Hall light"),
+    .init(id: "light.bathroom_switch_2", room: "bathroom", bg: "Осветление", en: "Bathroom light"),
+    .init(id: "fan.bathroom_switch_1", room: "bathroom", bg: "Вентилатор", en: "Bathroom fan"),
+    .init(id: "light.wifi_bel_2gang_switch_1", room: "terrace", bg: "Осветление", en: "Terrace light")
+]
+
+private struct StevoraDashboard: View {
     @EnvironmentObject private var model: StevoraModel
+    @State private var selected: StevoraTab = .home
+    @State private var selectedRoom = "living"
+    private var entityLookup: [String: HAEntity] {
+        Dictionary(uniqueKeysWithValues: model.entities.map { ($0.id, $0) })
+    }
+    private var homepodTemperature: String {
+        let value = entityLookup["sensor.realna_temperatura_homepod"]?.state ?? "—"
+        return ["unknown", "unavailable"].contains(value) ? "—" : value
+    }
+    private var homepodHumidity: String {
+        let value = entityLookup["sensor.realna_vlazhnost_homepod"]?.state ?? "—"
+        return ["unknown", "unavailable"].contains(value) ? "—" : value
+    }
 
     var body: some View {
-        TabView {
-            ForEach(Screen.allCases, id: \.self) { screen in
+        TabView(selection: $selected) {
+            ForEach(StevoraTab.allCases, id: \.self) { tab in
                 NavigationStack {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            header
-                            if screen == .home { homeSummary }
-                            if screen == .rooms { roomSelector }
-                            if let error = model.error {
-                                Text(error).font(.footnote).foregroundStyle(.red)
-                            }
-                            if screen == .assist {
-                                StevoraAssistView().frame(minHeight: 520)
-                            } else if screen == .settings {
-                                settings
-                            } else {
-                                let items = filtered(screen)
-                                if items.isEmpty {
-                                    Label(model.localized("Няма налични устройства", "No devices available"), systemImage: screen.symbol)
-                                        .foregroundStyle(.secondary)
-                                        .padding(20)
-                                } else {
-                                    LazyVStack(spacing: 12) {
-                                        ForEach(items) { entity in
-                                            DeviceTile(entity: entity)
-                                        }
-                                    }
+                        VStack(alignment: .leading, spacing: 21) {
+                            banner
+                            Group {
+                                switch tab {
+                                case .home: home
+                                case .rooms: rooms
+                                case .climate: climate
+                                case .assistant: StevoraAssistView().frame(minHeight: 570)
+                                case .more: more
                                 }
                             }
+                            if let error = model.error {
+                                Text(error).font(.footnote).foregroundStyle(.orange)
+                            }
                         }
-                        .padding(18)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
                     }
-                    .background(StevoraStyle.background)
+                    .background(StevoraBackdrop())
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                Task { await model.refresh() }
-                            } label: {
+                            Button { Task { await model.refresh() } } label: {
                                 Image(systemName: "arrow.clockwise")
                             }
                             .accessibilityLabel(model.localized("Обнови", "Refresh"))
@@ -176,197 +216,357 @@ private struct DashboardView: View {
                     }
                     .refreshable { await model.refresh() }
                 }
-                .tabItem { Label(screen.label(model), systemImage: screen.symbol) }
+                .tabItem { Label(tab.label(model), systemImage: tab.icon) }
+                .tag(tab)
             }
         }
-        .tint(StevoraStyle.accent)
+        .tint(Brand.cyan)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("STEVORA")
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
-                .tracking(3)
-                .foregroundStyle(StevoraStyle.accent)
-            Label(model.localized("Системата е свързана", "System connected"),
-                  systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.green)
-        }
-    }
-
-    private var homeSummary: some View {
+    private var banner: some View {
         HStack(spacing: 12) {
-            summaryTile("thermometer", title: model.localized("Температура", "Temperature"),
-                        value: model.entities.first(where: { $0.id.contains("homepod_temperature") })?.state ?? "—", unit: "°C")
-            summaryTile("humidity", title: model.localized("Влажност", "Humidity"),
-                        value: model.entities.first(where: { $0.id.contains("homepod_humidity") })?.state ?? "—", unit: "%")
+            Image("StevoraLogo")
+                .resizable().scaledToFit().frame(width: 61, height: 61)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("STEVORA")
+                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .tracking(3).foregroundStyle(Brand.light)
+                Label(model.localized("Системата е свързана", "Home Hub connected"),
+                      systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(Brand.mint)
+            }
+            Spacer()
+        }.padding(.vertical, 7)
+    }
+
+    private func section(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption.bold()).tracking(2.3).foregroundStyle(Brand.cyan)
+            Text(subtitle).font(.footnote).foregroundStyle(Brand.muted)
         }
     }
 
-    private func summaryTile(_ icon: String, title: String, value: String, unit: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon).font(.caption).foregroundStyle(.cyan)
-            Text(value + unit).font(.title2.bold())
-        }.frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16).background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+    private var home: some View {
+        VStack(alignment: .leading, spacing: 19) {
+            section(model.localized("МОЯТ ДОМ", "MY HOME"),
+                    subtitle: model.localized("Жив преглед на STEVORA", "Your live home overview"))
+            climateCenter
+            HStack(spacing: 12) {
+                metric(model.localized("СВЕТЛИНИ", "LIGHTS ON"),
+                       value: String(panelControls.filter {
+                           $0.id.hasPrefix("light.") && entityLookup[$0.id]?.state == "on"
+                       }.count), symbol: "lightbulb.fill")
+                metric(model.localized("ВЕНТИЛАТОР", "BATHROOM FAN"),
+                       value: entityLookup["fan.bathroom_switch_1"]?.state ?? "—", symbol: "fanblades")
+            }
+            section(model.localized("БЪРЗ ДОСТЪП", "QUICK ACCESS"),
+                    subtitle: model.localized("Управление с едно докосване", "One-tap native controls"))
+            HStack(spacing: 12) {
+                shortcut(model.localized("Помещения", "Rooms"), icon: "square.grid.2x2.fill", target: .rooms)
+                shortcut("STEVORA AI", icon: "waveform.circle.fill", target: .assistant)
+            }
+            section(model.localized("ДНЕВНА", "LIVING ROOM"),
+                    subtitle: model.localized("Актуални устройства", "Live devices"))
+            ForEach(panelControls.filter { $0.room == "living" && $0.id != "climate.air_conditioner" }) { control in
+                if let entity = entityLookup[control.id] {
+                    StevoraDeviceCard(entity: entity, name: model.localized(control.bg, control.en))
+                }
+            }
+        }
     }
 
-    private var roomSelector: some View {
-        let rooms = Array(Set(model.entities.compactMap { entity -> String? in
-            let name = entity.name
-            return name.contains(" ") ? String(name.split(separator: " ").first ?? "") : nil
-        })).sorted()
-        return ScrollView(.horizontal, showsIndicators: false) {
+    private var climateCenter: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                roomButton(model.localized("Всички", "All"), id: "all")
-                roomButton("★", id: "favorites")
-                ForEach(rooms, id: \.self) { room in roomButton(room, id: room) }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("CLIMATE CENTER").font(.headline)
+                    Text(model.localized("Дневна • комфорт в реално време", "Living Room • real-time comfort"))
+                        .font(.caption).foregroundStyle(Brand.muted)
+                }
+                Spacer()
+                Image(systemName: "thermometer.sun.fill").foregroundStyle(Brand.cyan)
             }
-        }
-    }
-
-    private func roomButton(_ title: String, id: String) -> some View {
-        Button(title) { model.selectedRoom = id }
-            .buttonStyle(.bordered)
-            .tint(model.selectedRoom == id ? .cyan : .gray)
-    }
-
-    private func filtered(_ screen: Screen) -> [HAEntity] {
-        let visible = model.entities.filter { !$0.id.localizedCaseInsensitiveContains("backlight") }
-        switch screen {
-        case .home:
-            return visible.filter { ["climate", "light", "sensor"].contains($0.domain) }
-                .prefix(14).map { $0 }
-        case .rooms:
-            return visible.filter {
-                guard ["light", "switch", "fan", "climate"].contains($0.domain) else { return false }
-                if model.selectedRoom == "favorites" { return model.favorites.contains($0.id) }
-                if model.selectedRoom == "all" { return true }
-                return $0.name.localizedCaseInsensitiveContains(model.selectedRoom)
+            HStack(spacing: 20) {
+                ZStack {
+                    Circle().trim(from: 0, to: 0.75)
+                        .stroke(Brand.border, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                    Circle().trim(from: 0, to: 0.75 * gaugeProgress)
+                        .stroke(AngularGradient(colors: [Brand.cyan, Brand.mint, .orange],
+                                                center: .center),
+                                style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                        .animation(.spring(response: 0.8, dampingFraction: 0.7), value: gaugeProgress)
+                    VStack(spacing: 1) {
+                        Text(homepodTemperature == "—" ? "—" : homepodTemperature + "°")
+                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .contentTransition(.numericText())
+                        Text("ROOM TEMP").font(.system(size: 9, weight: .semibold))
+                            .tracking(1).foregroundStyle(Brand.muted)
+                    }
+                }
+                .frame(width: 150, height: 150)
+                VStack(alignment: .leading, spacing: 19) {
+                    HStack {
+                        Image(systemName: "humidity.fill").foregroundStyle(Brand.cyan)
+                        VStack(alignment: .leading) {
+                            Text(model.localized("Влажност", "Humidity")).font(.caption).foregroundStyle(Brand.muted)
+                            Text(homepodHumidity == "—" ? "—" : homepodHumidity + "%").font(.title3.bold())
+                        }
+                    }
+                    HStack {
+                        Image(systemName: "air.conditioner.horizontal.fill").foregroundStyle(Brand.cyan)
+                        VStack(alignment: .leading) {
+                            Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
+                            Text(entityLookup["climate.air_conditioner"]?.state ?? "—").font(.headline)
+                        }
+                    }
+                }
             }
-        case .climate:
-            return visible.filter {
-                $0.domain == "climate" ||
-                ($0.domain == "sensor" &&
-                 ($0.id.localizedCaseInsensitiveContains("temperature") ||
-                  $0.id.localizedCaseInsensitiveContains("humidity") ||
-                  $0.id.localizedCaseInsensitiveContains("humudity")))
-            }
-        case .lights: return visible.filter { $0.domain == "light" }
-        case .routines: return visible.filter { ["scene", "script", "automation"].contains($0.domain) }
-        case .assist, .settings: return []
-        }
-    }
-
-    private var settings: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(model.localized("Език", "Language")).font(.headline)
-            Picker("Language", selection: Binding(
-                get: { model.language },
-                set: { model.setLanguage($0) }
-            )) {
-                Text("Български").tag("bg")
-                Text("English").tag("en")
-            }
-            .pickerStyle(.segmented)
-            Text(model.address).font(.caption).foregroundStyle(.secondary)
-            Button(role: .destructive) { model.logout() } label: {
-                Label(model.localized("Изход", "Sign out"), systemImage: "rectangle.portrait.and.arrow.right")
-            }
+            Button {
+                withAnimation(.spring()) { selected = .climate }
+            } label: {
+                HStack {
+                    Text(model.localized("Климатичен контрол", "Climate controls"))
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                }.font(.subheadline.bold()).foregroundStyle(Brand.cyan)
+            }.buttonStyle(StevoraTouchStyle())
         }
         .padding(20)
+        .modifier(StevoraGlassCard())
+    }
+    private var gaugeProgress: CGFloat {
+        guard let value = Double(homepodTemperature) else { return 0 }
+        return CGFloat(max(0, min(1, (value - 10) / 25)))
+    }
+    private func metric(_ label: String, value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: symbol).foregroundStyle(Brand.cyan)
+            Text(value).font(.title2.bold()).contentTransition(.numericText())
+            Text(label).font(.system(size: 10, weight: .medium))
+                .tracking(1).foregroundStyle(Brand.muted)
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 20))
+        .padding(17).modifier(StevoraGlassCard())
+    }
+    private func shortcut(_ label: String, icon: String, target: StevoraTab) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { selected = target }
+        } label: {
+            VStack(alignment: .leading, spacing: 13) {
+                Image(systemName: icon).font(.title2).foregroundStyle(Brand.cyan)
+                Text(label).font(.subheadline.bold()).foregroundStyle(Brand.light)
+                Image(systemName: "arrow.up.right").foregroundStyle(Brand.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(19)
+            .modifier(StevoraGlassCard())
+        }.buttonStyle(StevoraTouchStyle())
+    }
+
+    private func roomName(_ room: String) -> String {
+        switch room {
+        case "living": return model.localized("Хол", "Living Room")
+        case "kitchen": return model.localized("Кухня", "Kitchen")
+        case "hall": return model.localized("Коридор", "Hall")
+        case "bathroom": return model.localized("Баня", "Bathroom")
+        default: return model.localized("Тераса", "Terrace")
+        }
+    }
+
+    private var rooms: some View {
+        VStack(alignment: .leading, spacing: 17) {
+            section(model.localized("ПОМЕЩЕНИЯ", "ROOMS"),
+                    subtitle: model.localized("Само одобрените STEVORA контроли", "Curated STEVORA controls"))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 9) {
+                    ForEach(roomOrder, id: \.self) { room in
+                        Button(roomName(room)) {
+                            withAnimation(.easeInOut(duration: 0.28)) { selectedRoom = room }
+                        }
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 17).padding(.vertical, 11)
+                        .background(selectedRoom == room ? Brand.cyan : Brand.surface,
+                                    in: Capsule())
+                        .foregroundStyle(selectedRoom == room ? Brand.background : Brand.light)
+                        .buttonStyle(StevoraTouchStyle())
+                    }
+                }.padding(.vertical, 4)
+            }
+            ForEach(panelControls.filter { $0.room == selectedRoom }) { control in
+                if let entity = entityLookup[control.id] {
+                    StevoraDeviceCard(entity: entity, name: model.localized(control.bg, control.en))
+                }
+            }
+            if panelControls.filter({ $0.room == selectedRoom && entityLookup[$0.id] != nil }).isEmpty {
+                Label(model.localized("Няма налични контроли", "No available controls"),
+                      systemImage: "square.grid.2x2").foregroundStyle(Brand.muted).padding(18)
+            }
+        }
+    }
+
+    private var climate: some View {
+        VStack(alignment: .leading, spacing: 17) {
+            section("CLIMATE CENTER", subtitle: model.localized("Мониторинг и управление", "Monitor and control"))
+            climateCenter
+            HStack(spacing: 12) {
+                metric(model.localized("ТЕМПЕРАТУРА", "TEMPERATURE"),
+                       value: homepodTemperature == "—" ? "—" : homepodTemperature + "°C", symbol: "thermometer.medium")
+                metric(model.localized("ВЛАЖНОСТ", "HUMIDITY"),
+                       value: homepodHumidity == "—" ? "—" : homepodHumidity + "%", symbol: "humidity.fill")
+            }
+            if let device = entityLookup["climate.air_conditioner"] {
+                StevoraDeviceCard(entity: device,
+                                  name: model.localized("Климатик", "Air conditioner"))
+            }
+        }
+    }
+
+    private var more: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            section(model.localized("КОНТРОЛЕН ЦЕНТЪР", "CONTROL CENTER"),
+                    subtitle: model.localized("Автоматизации и настройки", "Routines and settings"))
+            VStack(alignment: .leading, spacing: 13) {
+                Text(model.localized("Сцени и автоматизации", "Scenes and automations"))
+                    .font(.headline)
+                ForEach(model.entities.filter {
+                    ["scene", "script", "automation"].contains($0.domain)
+                    && !$0.id.lowercased().contains("backlight")
+                }) { entity in
+                    HStack(spacing: 9) {
+                        Image(systemName: "play.square.stack.fill").foregroundStyle(Brand.cyan)
+                        Text(entity.name).lineLimit(2)
+                        Spacer()
+                        Button {
+                            Task { await model.runRoutine(entity) }
+                        } label: {
+                            Image(systemName: "play.circle.fill").font(.title2)
+                        }.accessibilityLabel(model.localized("Стартирай", "Run"))
+                    }
+                    .padding(.vertical, 6)
+                }
+            }.padding(19).modifier(StevoraGlassCard())
+            VStack(alignment: .leading, spacing: 15) {
+                Text(model.localized("Език", "Language")).font(.headline)
+                Picker("Language", selection: Binding(
+                    get: { model.language },
+                    set: { model.setLanguage($0) }
+                )) {
+                    Text("Български").tag("bg")
+                    Text("English").tag("en")
+                }.pickerStyle(.segmented)
+                Text(model.address).font(.caption).foregroundStyle(Brand.muted)
+                Button(role: .destructive) { model.logout() } label: {
+                    Label(model.localized("Изход от профила", "Sign out"),
+                          systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }.padding(19).modifier(StevoraGlassCard())
+        }
     }
 }
 
-private struct DeviceTile: View {
+private struct StevoraDeviceCard: View {
     @EnvironmentObject private var model: StevoraModel
     let entity: HAEntity
+    let name: String
+    @State private var expanded = false
     @State private var brightness = 50.0
 
+    private var symbol: String {
+        switch entity.domain {
+        case "light": "lightbulb.fill"
+        case "fan": "fanblades.fill"
+        case "climate": "air.conditioner.horizontal"
+        case "media_player": "tv"
+        default: "switch.2"
+        }
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(StevoraStyle.accent)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).font(.title3).foregroundStyle(Brand.cyan)
                     .frame(width: 34)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(displayName).font(.headline).lineLimit(2)
-                    Text(entity.state + (entity.attributes.unit_of_measurement ?? ""))
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(name).font(.headline)
+                    Text(entity.state).font(.caption).foregroundStyle(Brand.muted)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 Button { model.toggleFavorite(entity.id) } label: {
                     Image(systemName: model.favorites.contains(entity.id) ? "star.fill" : "star")
-                }.accessibilityLabel("Favorite")
-                if ["scene", "script", "automation"].contains(entity.domain) {
-                    Button {
-                        Task { await model.runRoutine(entity) }
-                    } label: { Image(systemName: "play.circle.fill").font(.title2) }
-                    .accessibilityLabel(model.localized("Стартирай", "Run"))
+                        .foregroundStyle(Brand.cyan)
                 }
-                if ["light", "switch", "fan"].contains(entity.domain) {
+                .accessibilityLabel("Favorite")
+                if ["light", "fan", "switch"].contains(entity.domain) {
                     Button {
                         Task { await model.toggle(entity) }
                     } label: {
                         Image(systemName: entity.state == "on" ? "power.circle.fill" : "power.circle")
-                            .font(.title2)
-                    }
-                    .accessibilityLabel(entity.state == "on" ? "Turn off" : "Turn on")
+                            .font(.title2).foregroundStyle(Brand.cyan)
+                    }.accessibilityLabel(entity.state == "on" ? "Turn off" : "Turn on")
                 }
             }
             if entity.domain == "climate", let target = entity.attributes.temperature {
-                HStack {
+                HStack(spacing: 14) {
                     Text(model.localized("Зададена", "Target") + ": \(Int(target))°C")
+                        .font(.subheadline)
                     Spacer()
-                    Button {
-                        Task { await model.setTemperature(entity, value: target - 1) }
-                    } label: { Image(systemName: "minus.circle") }
-                    Button {
-                        Task { await model.setTemperature(entity, value: target + 1) }
-                    } label: { Image(systemName: "plus.circle") }
-                }
-                .font(.subheadline)
+                    Button { Task { await model.setTemperature(entity, value: target - 1) } } label: {
+                        Image(systemName: "minus.circle.fill").font(.title2)
+                    }
+                    Button { Task { await model.setTemperature(entity, value: target + 1) } } label: {
+                        Image(systemName: "plus.circle.fill").font(.title2)
+                    }
+                }.foregroundStyle(Brand.cyan)
             }
-            if entity.domain == "light", entity.state == "on" {
-                HStack {
-                    Text(model.localized("Яркост", "Brightness"))
-                    Slider(value: $brightness, in: 1...100, step: 1) { editing in
-                        if !editing { Task { await model.setBrightness(entity, value: brightness) } }
+            if entity.domain == "light" && entity.state == "on" {
+                Button {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
+                } label: {
+                    HStack {
+                        Text(model.localized("Яркост и цвят", "Brightness & color"))
+                        Spacer()
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    }.font(.caption).foregroundStyle(Brand.muted)
+                }.buttonStyle(StevoraTouchStyle())
+                if expanded {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sun.min").foregroundStyle(Brand.cyan)
+                        Slider(value: $brightness, in: 1...100, step: 1) { editing in
+                            if !editing { Task { await model.setBrightness(entity, value: brightness) } }
+                        }
+                        Image(systemName: "sun.max").foregroundStyle(Brand.cyan)
+                    }
+                    if entity.id == "light.rgb_cct" {
+                        HStack(spacing: 13) {
+                            colorDot(.red, rgb: [255, 0, 0])
+                            colorDot(.pink, rgb: [255, 25, 130])
+                            colorDot(.blue, rgb: [0, 100, 255])
+                            colorDot(.white, rgb: [255, 255, 255])
+                        }
                     }
                 }
-                .font(.caption)
-                .onAppear { syncBrightness() }
-                .onChange(of: entity.attributes.brightness) { _ in syncBrightness() }
             }
         }
-        .padding(16)
-        .background(StevoraStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+        .padding(19)
+        .modifier(StevoraGlassCard())
+        .onAppear { updateBrightness() }
+        .onChange(of: entity.attributes.brightness) { _ in updateBrightness() }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: expanded)
     }
-
-    private func syncBrightness() {
-        if let b = entity.attributes.brightness {
-            brightness = max(1, min(100, Double(b) / 255 * 100))
+    private func updateBrightness() {
+        if let level = entity.attributes.brightness {
+            brightness = min(100, max(1, Double(level) * 100 / 255))
         }
     }
-
-    private var displayName: String {
-        if entity.attributes.friendly_name != nil { return entity.name }
-        let suffix = entity.id.split(separator: ".").last.map(String.init) ?? entity.id
-        return suffix.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-
-    private var icon: String {
-        switch entity.domain {
-        case "light": "lightbulb"
-        case "climate": "thermometer.medium"
-        case "switch": "switch.2"
-        case "fan": "fanblades"
-        case "scene", "script", "automation": "play.square.stack"
-        default: "waveform.path.ecg"
+    private func colorDot(_ color: Color, rgb: [Int]) -> some View {
+        Button {
+            Task { await model.setColor(entity, rgb: rgb) }
+        } label: {
+            Circle().fill(color).frame(width: 30, height: 30)
+                .overlay(Circle().stroke(Brand.light.opacity(0.4), lineWidth: 1))
         }
+        .buttonStyle(StevoraTouchStyle())
+        .accessibilityLabel("Set light color")
     }
 }
