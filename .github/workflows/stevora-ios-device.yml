@@ -13,7 +13,7 @@ on:
       - '.github/workflows/stevora-ios-device.yml'
 
 concurrency:
-  group: stevora-ios-device-${{ github.ref }}
+  group: stevora-ios-device-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
