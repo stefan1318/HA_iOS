@@ -94,6 +94,19 @@ struct HAClient {
         return data
     }
 
+    func conversation(text: String, conversationID: String?) async throws -> (String, String?) {
+        var body: [String: Any] = ["text": text, "language": "bg"]
+        if let conversationID { body["conversation_id"] = conversationID }
+        let encoded = try JSONSerialization.data(withJSONObject: body)
+        let data = try await request("/api/conversation/process", method: "POST", body: encoded)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let response = result["response"] as? [String: Any],
+              let speech = response["speech"] as? [String: Any],
+              let plain = speech["plain"] as? [String: Any],
+              let answer = plain["speech"] as? String else { throw HAError.unexpectedResponse }
+        return (answer, result["conversation_id"] as? String)
+    }
+
     func check() async throws {
         _ = try await request("/api/")
     }
