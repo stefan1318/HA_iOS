@@ -157,14 +157,15 @@ private struct StevoraDashboard: View {
         Dictionary(uniqueKeysWithValues: model.entities.map { ($0.id, $0) })
     }
     private var controls: [HAEntity] {
-        model.entities.filter { controllableDomains.contains($0.domain)
+        model.projectedEntities.filter { controllableDomains.contains($0.domain)
             && !$0.id.lowercased().contains("backlight") }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
     private var deviceGroups: [String] {
-        ["all"] + Array(Set(controls.map(\.domain))).sorted()
+        model.stevoraManifest != nil ? ["all"] + model.projectedRooms.map(\.id) : ["all"] + Array(Set(controls.map(\.domain))).sorted()
     }
     private func groupLabel(_ domain: String) -> String {
+        if let room = model.projectedRooms.first(where: { $0.id == domain }) { return room.name }
         switch domain {
         case "all": return model.localized("Всички", "All")
         case "light": return model.localized("Осветление", "Lights")
@@ -178,17 +179,17 @@ private struct StevoraDashboard: View {
         }
     }
     private var temperatureSensor: HAEntity? {
-        model.entities.first { $0.domain == "sensor" &&
+        model.projectedEntities.first { $0.domain == "sensor" &&
             $0.attributes.device_class == "temperature" &&
             Double($0.state) != nil }
     }
     private var humiditySensor: HAEntity? {
-        model.entities.first { $0.domain == "sensor" &&
+        model.projectedEntities.first { $0.domain == "sensor" &&
             $0.attributes.device_class == "humidity" &&
             Double($0.state) != nil }
     }
     private var homepodTemperature: String {
-        temperatureSensor?.state ?? model.entities.first(where: {
+        temperatureSensor?.state ?? model.projectedEntities.first(where: {
             $0.domain == "climate" && $0.attributes.current_temperature != nil
         }).flatMap { $0.attributes.current_temperature.map { String(format: "%.1f", $0) } } ?? "—"
     }
@@ -329,7 +330,7 @@ private struct StevoraDashboard: View {
                         Image(systemName: "air.conditioner.horizontal.fill").foregroundStyle(Brand.cyan)
                         VStack(alignment: .leading) {
                             Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
-                            Text(model.entities.first(where: { $0.domain == "climate" })?.state ?? "—").font(.headline)
+                            Text(model.projectedEntities.first(where: { $0.domain == "climate" })?.state ?? "—").font(.headline)
                         }
                     }
                 }
@@ -378,7 +379,9 @@ private struct StevoraDashboard: View {
     private var rooms: some View {
         VStack(alignment: .leading, spacing: 17) {
             section(model.localized("УСТРОЙСТВА", "DEVICES"),
-                    subtitle: model.localized("Автоматично открити контроли", "Automatically discovered controls"))
+                    subtitle: model.stevoraManifest != nil
+                        ? model.localized("Помещения от STEVORA", "Rooms from STEVORA")
+                        : model.localized("Автоматично открити контроли", "Automatically discovered controls"))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 9) {
                     ForEach(deviceGroups, id: \.self) { group in
@@ -392,11 +395,17 @@ private struct StevoraDashboard: View {
                     }
                 }.padding(.vertical, 4)
             }
-            ForEach(controls.filter { selectedRoom == "all" || $0.domain == selectedRoom }) { entity in
+            ForEach(controls.filter { entity in
+                selectedRoom == "all" || (model.stevoraManifest != nil
+                    ? model.projectedEntities(in: selectedRoom).contains(where: { $0.id == entity.id })
+                    : entity.domain == selectedRoom)
+            }) { entity in
                 StevoraDeviceCard(entity: entity, name: entity.name)
             }
             if controls.isEmpty {
-                Text(model.localized("Няма открити управляеми устройства", "No controllable devices discovered"))
+                Text(model.stevoraManifest != nil
+                     ? model.localized("Няма устройства, зададени в STEVORA Manifest", "No devices assigned by STEVORA Manifest")
+                     : model.localized("Няма открити управляеми устройства", "No controllable devices discovered"))
                     .foregroundStyle(Brand.muted)
             }
         }
@@ -425,7 +434,7 @@ private struct StevoraDashboard: View {
             VStack(alignment: .leading, spacing: 13) {
                 Text(model.localized("Сцени и автоматизации", "Scenes and automations"))
                     .font(.headline)
-                ForEach(model.entities.filter {
+                ForEach(model.projectedEntities.filter {
                     ["scene", "script", "automation"].contains($0.domain)
                     && !$0.id.lowercased().contains("backlight")
                 }) { entity in
