@@ -231,3 +231,29 @@ public extension HATypedRequest {
         .init(request: .init(type: "stevora/manifest"))
     }
 }
+
+
+/// Read-only projection for STEVORA screens. Native HA remains the fallback.
+@MainActor
+public final class HAStevoraHomeProjection {
+    public static let shared = HAStevoraHomeProjection()
+    public static let didChange = Notification.Name("STEVORAHomeProjectionDidChange")
+
+    public private(set) var current: HAStevoraDiscovery?
+
+    private init() {}
+
+    public func apply(_ manifest: HAStevoraDiscovery) {
+        guard manifest.schemaVersion == "1.0", !manifest.installationId.isEmpty else {
+            clear()
+            return
+        }
+        current = manifest
+        NotificationCenter.default.post(name: Self.didChange, object: nil)
+    }
+
+    public func clear() {
+        current = nil
+        NotificationCenter.default.post(name: Self.didChange, object: nil)
+    }
+}
