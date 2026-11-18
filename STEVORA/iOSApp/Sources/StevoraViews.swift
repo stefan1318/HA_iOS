@@ -93,6 +93,18 @@ private struct StevoraOnboarding: View {
                             SecureField(model.localized("Токен за достъп", "Access token"), text: $model.token)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                         }
+                        Toggle(isOn: Binding(
+                            get: { model.allowLocalHTTP },
+                            set: { model.setLocalHTTPAllowed($0) }
+                        )) {
+                            Text(model.localized("Разреши HTTP само в локална мрежа", "Allow HTTP on local network only"))
+                        }
+                        .tint(Brand.cyan)
+                        Text(model.localized(
+                            "Само за частни IP адреси (10.x, 172.16–31.x, 192.168.x). Токенът и командите не са криптирани. Не използвай в недоверена Wi-Fi мрежа.",
+                            "Private IP addresses only (10.x, 172.16–31.x, 192.168.x). Tokens and commands are not encrypted. Do not use on untrusted Wi-Fi."
+                        ))
+                        .font(.caption).foregroundStyle(Brand.muted)
                         Text(model.localized("Избери защитен вход с акаунта си или токен за тестова инсталация.",
                                              "Use secure account sign-in or a token for development installs."))
                             .font(.caption).foregroundStyle(Brand.muted)
