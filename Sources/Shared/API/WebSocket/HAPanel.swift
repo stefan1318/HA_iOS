@@ -248,6 +248,11 @@ public final class HAStevoraHomeProjection {
             clear()
             return
         }
+        if let previous = current,
+           previous.installationId == manifest.installationId,
+           previous.revision > manifest.revision {
+            return
+        }
         current = manifest
         NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
