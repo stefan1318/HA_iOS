@@ -146,44 +146,53 @@ private enum StevoraTab: String, CaseIterable {
     }
 }
 
-private struct StevoraControl: Identifiable {
-    let id: String
-    let room: String
-    let bg: String
-    let en: String
-    var name: String { bg }
-}
-
-private let roomOrder = ["living", "kitchen", "hall", "bathroom", "terrace"]
-private let panelControls: [StevoraControl] = [
-    .init(id: "climate.air_conditioner", room: "living", bg: "Климатик", en: "Air conditioner"),
-    .init(id: "light.rgb_cct", room: "living", bg: "LED лента", en: "LED strip"),
-    .init(id: "media_player.living_room_tv_2", room: "living", bg: "Телевизор", en: "Living Room TV"),
-    .init(id: "light.living_room_switch_1", room: "living", bg: "Лява светлина", en: "Left light"),
-    .init(id: "light.living_room_switch_2", room: "living", bg: "Средна светлина", en: "Middle light"),
-    .init(id: "light.living_room_switch_3", room: "living", bg: "Дясна светлина", en: "Right light"),
-    .init(id: "light.wifi_bel_2gang_switch_2", room: "kitchen", bg: "Осветление", en: "Kitchen light"),
-    .init(id: "light.terrace_switch_1", room: "hall", bg: "Осветление", en: "Hall light"),
-    .init(id: "light.bathroom_switch_2", room: "bathroom", bg: "Осветление", en: "Bathroom light"),
-    .init(id: "fan.bathroom_switch_1", room: "bathroom", bg: "Вентилатор", en: "Bathroom fan"),
-    .init(id: "light.wifi_bel_2gang_switch_1", room: "terrace", bg: "Осветление", en: "Terrace light")
-]
+// Capability-based device discovery. Never assume the test home's entity IDs or room names.
+private let controllableDomains: Set<String> = ["light", "switch", "fan", "climate", "media_player", "cover", "lock"]
 
 private struct StevoraDashboard: View {
     @EnvironmentObject private var model: StevoraModel
     @State private var selected: StevoraTab = .home
-    @State private var selectedRoom = "living"
+    @State private var selectedRoom = "all"
     private var entityLookup: [String: HAEntity] {
         Dictionary(uniqueKeysWithValues: model.entities.map { ($0.id, $0) })
     }
+    private var controls: [HAEntity] {
+        model.entities.filter { controllableDomains.contains($0.domain)
+            && !$0.id.lowercased().contains("backlight") }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    private var deviceGroups: [String] {
+        ["all"] + Array(Set(controls.map(\.domain))).sorted()
+    }
+    private func groupLabel(_ domain: String) -> String {
+        switch domain {
+        case "all": return model.localized("Всички", "All")
+        case "light": return model.localized("Осветление", "Lights")
+        case "climate": return model.localized("Климат", "Climate")
+        case "fan": return model.localized("Вентилатори", "Fans")
+        case "switch": return model.localized("Ключове", "Switches")
+        case "media_player": return model.localized("Медия", "Media")
+        case "cover": return model.localized("Щори", "Covers")
+        case "lock": return model.localized("Брави", "Locks")
+        default: return domain.capitalized
+        }
+    }
+    private var temperatureSensor: HAEntity? {
+        model.entities.first { $0.domain == "sensor" &&
+            $0.attributes.device_class == "temperature" &&
+            Double($0.state) != nil }
+    }
+    private var humiditySensor: HAEntity? {
+        model.entities.first { $0.domain == "sensor" &&
+            $0.attributes.device_class == "humidity" &&
+            Double($0.state) != nil }
+    }
     private var homepodTemperature: String {
-        let value = entityLookup["sensor.realna_temperatura_homepod"]?.state ?? "—"
-        return ["unknown", "unavailable"].contains(value) ? "—" : value
+        temperatureSensor?.state ?? model.entities.first(where: {
+            $0.domain == "climate" && $0.attributes.current_temperature != nil
+        }).flatMap { $0.attributes.current_temperature.map { String(format: "%.1f", $0) } } ?? "—"
     }
-    private var homepodHumidity: String {
-        let value = entityLookup["sensor.realna_vlazhnost_homepod"]?.state ?? "—"
-        return ["unknown", "unavailable"].contains(value) ? "—" : value
-    }
+    private var homepodHumidity: String { humiditySensor?.state ?? "—" }
 
     var body: some View {
         TabView(selection: $selected) {
@@ -258,11 +267,10 @@ private struct StevoraDashboard: View {
             climateCenter
             HStack(spacing: 12) {
                 metric(model.localized("СВЕТЛИНИ", "LIGHTS ON"),
-                       value: String(panelControls.filter {
-                           $0.id.hasPrefix("light.") && entityLookup[$0.id]?.state == "on"
-                       }.count), symbol: "lightbulb.fill")
-                metric(model.localized("ВЕНТИЛАТОР", "BATHROOM FAN"),
-                       value: entityLookup["fan.bathroom_switch_1"]?.state ?? "—", symbol: "fanblades")
+                       value: String(controls.filter { $0.domain == "light" && $0.state == "on" }.count),
+                       symbol: "lightbulb.fill")
+                metric(model.localized("УСТРОЙСТВА", "DEVICES"),
+                       value: String(controls.count), symbol: "square.grid.2x2")
             }
             section(model.localized("БЪРЗ ДОСТЪП", "QUICK ACCESS"),
                     subtitle: model.localized("Управление с едно докосване", "One-tap native controls"))
@@ -270,12 +278,10 @@ private struct StevoraDashboard: View {
                 shortcut(model.localized("Помещения", "Rooms"), icon: "square.grid.2x2.fill", target: .rooms)
                 shortcut("STEVORA AI", icon: "waveform.circle.fill", target: .assistant)
             }
-            section(model.localized("ДНЕВНА", "LIVING ROOM"),
-                    subtitle: model.localized("Актуални устройства", "Live devices"))
-            ForEach(panelControls.filter { $0.room == "living" && $0.id != "climate.air_conditioner" }) { control in
-                if let entity = entityLookup[control.id] {
-                    StevoraDeviceCard(entity: entity, name: model.localized(control.bg, control.en))
-                }
+            section(model.localized("ИЗБРАНИ УСТРОЙСТВА", "FAVORITE DEVICES"),
+                    subtitle: model.localized("Твоите избрани контроли", "Your selected controls"))
+            ForEach(controls.filter { model.favorites.contains($0.id) }) { entity in
+                StevoraDeviceCard(entity: entity, name: entity.name)
             }
         }
     }
@@ -285,7 +291,7 @@ private struct StevoraDashboard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("CLIMATE CENTER").font(.headline)
-                    Text(model.localized("Дневна • комфорт в реално време", "Living Room • real-time comfort"))
+                    Text(model.localized("Данни от наличните датчици", "Available sensor readings"))
                         .font(.caption).foregroundStyle(Brand.muted)
                 }
                 Spacer()
@@ -323,7 +329,7 @@ private struct StevoraDashboard: View {
                         Image(systemName: "air.conditioner.horizontal.fill").foregroundStyle(Brand.cyan)
                         VStack(alignment: .leading) {
                             Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
-                            Text(entityLookup["climate.air_conditioner"]?.state ?? "—").font(.headline)
+                            Text(model.entities.first(where: { $0.domain == "climate" })?.state ?? "—").font(.headline)
                         }
                     }
                 }
@@ -369,43 +375,29 @@ private struct StevoraDashboard: View {
         }.buttonStyle(StevoraTouchStyle())
     }
 
-    private func roomName(_ room: String) -> String {
-        switch room {
-        case "living": return model.localized("Хол", "Living Room")
-        case "kitchen": return model.localized("Кухня", "Kitchen")
-        case "hall": return model.localized("Коридор", "Hall")
-        case "bathroom": return model.localized("Баня", "Bathroom")
-        default: return model.localized("Тераса", "Terrace")
-        }
-    }
-
     private var rooms: some View {
         VStack(alignment: .leading, spacing: 17) {
-            section(model.localized("ПОМЕЩЕНИЯ", "ROOMS"),
-                    subtitle: model.localized("Само одобрените STEVORA контроли", "Curated STEVORA controls"))
+            section(model.localized("УСТРОЙСТВА", "DEVICES"),
+                    subtitle: model.localized("Автоматично открити контроли", "Automatically discovered controls"))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 9) {
-                    ForEach(roomOrder, id: \.self) { room in
-                        Button(roomName(room)) {
-                            withAnimation(.easeInOut(duration: 0.28)) { selectedRoom = room }
+                    ForEach(deviceGroups, id: \.self) { group in
+                        Button(groupLabel(group)) {
+                            withAnimation(.easeInOut(duration: 0.28)) { selectedRoom = group }
                         }
                         .font(.subheadline.bold())
                         .padding(.horizontal, 17).padding(.vertical, 11)
-                        .background(selectedRoom == room ? Brand.cyan : Brand.surface,
-                                    in: Capsule())
-                        .foregroundStyle(selectedRoom == room ? Brand.background : Brand.light)
-                        .buttonStyle(StevoraTouchStyle())
+                        .background(selectedRoom == group ? Brand.cyan : Brand.surface, in: Capsule())
+                        .foregroundStyle(selectedRoom == group ? Brand.background : Brand.light)
                     }
                 }.padding(.vertical, 4)
             }
-            ForEach(panelControls.filter { $0.room == selectedRoom }) { control in
-                if let entity = entityLookup[control.id] {
-                    StevoraDeviceCard(entity: entity, name: model.localized(control.bg, control.en))
-                }
+            ForEach(controls.filter { selectedRoom == "all" || $0.domain == selectedRoom }) { entity in
+                StevoraDeviceCard(entity: entity, name: entity.name)
             }
-            if panelControls.filter({ $0.room == selectedRoom && entityLookup[$0.id] != nil }).isEmpty {
-                Label(model.localized("Няма налични контроли", "No available controls"),
-                      systemImage: "square.grid.2x2").foregroundStyle(Brand.muted).padding(18)
+            if controls.isEmpty {
+                Text(model.localized("Няма открити управляеми устройства", "No controllable devices discovered"))
+                    .foregroundStyle(Brand.muted)
             }
         }
     }
@@ -420,9 +412,8 @@ private struct StevoraDashboard: View {
                 metric(model.localized("ВЛАЖНОСТ", "HUMIDITY"),
                        value: homepodHumidity == "—" ? "—" : homepodHumidity + "%", symbol: "humidity.fill")
             }
-            if let device = entityLookup["climate.air_conditioner"] {
-                StevoraDeviceCard(entity: device,
-                                  name: model.localized("Климатик", "Air conditioner"))
+            ForEach(controls.filter { $0.domain == "climate" }) { device in
+                StevoraDeviceCard(entity: device, name: device.name)
             }
         }
     }
@@ -588,7 +579,7 @@ private struct StevoraDeviceCard: View {
                     }
                     if entity.attributes.supported_color_modes?.contains(where: {
                         ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0)
-                    }) == true || entity.id == "light.rgb_cct" {
+                    }) == true {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(model.localized("RGB цвят", "RGB color")).font(.caption)
                             HStack {
@@ -616,7 +607,7 @@ private struct StevoraDeviceCard: View {
                             ForEach(effects, id: \.self) { Text($0).tag($0) }
                         }.pickerStyle(.menu)
                     }
-                    if entity.id == "light.rgb_cct" {
+                    if entity.attributes.supported_color_modes?.contains(where: { ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0) }) == true {
                         HStack(spacing: 13) {
                             colorDot(.red, rgb: [255, 0, 0])
                             colorDot(.pink, rgb: [255, 25, 130])
