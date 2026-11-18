@@ -207,3 +207,21 @@ private struct HAPanelsCacheKey: HACacheKey {
         )
     }
 }
+
+
+/** Optional STEVORA capability probe on the existing authenticated HA WebSocket. */
+public struct HAStevoraDiscovery: HADataDecodable {
+    public let installationId: String
+    public let revision: Int
+
+    public init(data: HAData) throws {
+        self.installationId = try data.decode("installation_id")
+        self.revision = try data.decode("revision")
+    }
+}
+
+public extension HATypedRequest {
+    static func stevoraDiscovery() -> HATypedRequest<HAStevoraDiscovery> {
+        .init(request: .init(type: "stevora/manifest"))
+    }
+}
