@@ -13,6 +13,9 @@ checks = {
     "manifest schema and installation validation": 'manifest.schemaVersion == "1.0"' in model and "!manifest.installationId.isEmpty" in model,
     "manifest revision monotonicity": "previous.revision > manifest.revision" in model,
     "no hardcoded Home Hub installation": 'installation_id' in manifest and 'stevoraManifest' in model,
+    "manifest-owned room projection": "projectedRooms" in model and "projectedEntities(in roomID:" in model,
+    "manifest-owned device visibility": "model.projectedEntities.filter" in views and "model.projectedRooms.map" in views,
+    "no silent HA expansion after manifest": "guard let manifest = stevoraManifest else { return entities }" in model and "allowed.contains($0.id)" in model,
     "offline safety intact": model.count("connected && liveConnected") >= 8,
     "backlight policy intact": 'contains("backlight")' in model and 'contains("backlight")' in views,
 }
