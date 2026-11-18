@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          xcodebuild -project HomeAssistant.xcodeproj -scheme App-Debug -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/stevora-derived" CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project HomeAssistant.xcodeproj -scheme App-Debug -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/stevora-derived" CODE_SIGNING_ALLOWED=NO build
       - name: Package unsigned IPA and record provenance
         shell: bash
         run: |
