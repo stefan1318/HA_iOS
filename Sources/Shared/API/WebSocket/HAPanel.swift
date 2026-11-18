@@ -214,8 +214,8 @@ public struct HAStevoraDiscovery: HADataDecodable {
     public let revision: Int
 
     public init(data: HAData) throws {
-        installationId = try data.decode("installation_id")
-        revision = try data.decode("revision")
+        self.installationId = try data.decode("installation_id")
+        self.revision = try data.decode("revision")
     }
 }
 
