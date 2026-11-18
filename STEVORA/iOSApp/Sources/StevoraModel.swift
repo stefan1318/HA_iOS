@@ -104,6 +104,8 @@ final class StevoraModel: ObservableObject {
                 } else {
                     self.entities.append(entity)
                 }
+            }, onReady: { [weak self] in
+                self?.liveConnected = true
             }, onReconnect: { [weak self] in
                 self?.liveConnected = false
                 await self?.refresh()
