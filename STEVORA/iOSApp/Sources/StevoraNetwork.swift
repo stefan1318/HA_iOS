@@ -73,16 +73,37 @@ enum CredentialStore {
     }
 }
 
+/// Plain HTTP is opt-in and limited to literal RFC1918 IPv4 hosts.
+enum StevoraTransportPolicy {
+    static func permits(_ url: URL, allowLocalHTTP: Bool) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host,
+              url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil else { return false }
+        if scheme == "https" { return true }
+        guard scheme == "http", allowLocalHTTP else { return false }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+        var values: [Int] = []
+        for octet in octets {
+            guard !octet.isEmpty, octet.count <= 3,
+                  octet.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  (octet.count == 1 || octet.first != "0"),
+                  let value = Int(octet), (0...255).contains(value) else { return false }
+            values.append(value)
+        }
+        return values[0] == 10 ||
+            (values[0] == 172 && (16...31).contains(values[1])) ||
+            (values[0] == 192 && values[1] == 168)
+    }
+}
+
 struct HAClient {
     let baseURL: URL
     let token: String
 
-    init(address: String, token: String) throws {
+    init(address: String, token: String, allowLocalHTTP: Bool = false) throws {
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme?.lowercased() == "https",
-              let host = url.host, !host.isEmpty,
-              url.user == nil, url.password == nil,
-              url.query == nil, url.fragment == nil else { throw HAError.insecureConnection }
+              StevoraTransportPolicy.permits(url, allowLocalHTTP: allowLocalHTTP) else { throw HAError.insecureConnection }
         baseURL = url
         self.token = token
     }
