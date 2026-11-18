@@ -1815,6 +1815,13 @@ extension HomeAssistantAPI: HAConnectionDelegate {
         switch state {
         case .ready:
             resetRejectedReconnectRecovery()
+            // Optional discovery through the current OAuth-authenticated WebSocket.
+            // Failure must not interrupt native Home Assistant functionality.
+            connection.send(.stevoraDiscovery()).promise.done { manifest in
+                Current.Log.info("STEVORA manifest revision available: \(manifest.revision)")
+            }.catch { _ in
+                Current.Log.info("STEVORA discovery unavailable; native Home Assistant mode")
+            }
         case .disconnected(reason: .rejected):
             invalidateRejectedAccessToken()
             scheduleRejectedReconnectRecoveryIfNeeded()
