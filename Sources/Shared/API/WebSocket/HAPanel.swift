@@ -1,3 +1,4 @@
+import Foundation
 import HAKit
 
 public extension HACachesContainer {
