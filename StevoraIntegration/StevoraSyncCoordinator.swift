@@ -28,8 +28,9 @@ public final class StevoraSyncCoordinator {
             guard let manifest = try StevoraManifestSync.parseResponse(data) else {
                 return .nativeHomeAssistantFallback
             }
-            if cached?.installationId == manifest.installationId &&
-                cached?.revision == manifest.revision {
+            if cached?.installationId == manifest.installationId,
+               cached?.revision == manifest.revision
+            {
                 return .unchanged
             }
             cached = manifest
