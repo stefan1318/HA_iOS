@@ -257,6 +257,13 @@ public final class HAStevoraHomeProjection {
         NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
 
+    /// Read-only room and entity selectors for native STEVORA views.
+    public var rooms: [[String: String]] { current?.rooms ?? [] }
+
+    public func entities(for mappingKey: String) -> [String] {
+        current?.mappings[mappingKey] ?? []
+    }
+
     public func clear() {
         current = nil
         NotificationCenter.default.post(name: Self.didChange, object: nil)
