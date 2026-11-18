@@ -22,8 +22,15 @@ jobs:
       - name: Checkout STEVORA iOS development branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: feature/stevora-manifest-sync-v1
+          ref: feature/stevora-ios
           persist-credentials: false
+      - name: Verify STEVORA product identity
+        run: |
+          set -euo pipefail
+          if ! grep -Ril --include='*.swift' --include='*.xcconfig' --include='*.plist' 'stevora' Sources Configuration 2>/dev/null | grep -q .; then
+            echo "::error::STEVORA branding not verified in iOS product source. Refusing to publish upstream HA IPA."
+            exit 1
+          fi
       - name: Select Xcode 27
         run: |
           set -euo pipefail
