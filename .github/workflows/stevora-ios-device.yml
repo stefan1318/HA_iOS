@@ -31,6 +31,8 @@ jobs:
         run: brew install xcodegen
       - name: Verify STEVORA Ecosystem policy gate
         run: python3 scripts/check_stevora_ecosystem_ios.py
+      - name: Verify optional STEVORA manifest compatibility
+        run: python3 scripts/check_stevora_ios_manifest.py
       - name: Generate STEVORA icon
         run: |
           swift STEVORA/iOSApp/Branding/generate-icon.swift STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
