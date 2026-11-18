@@ -9,6 +9,7 @@ final class StevoraLiveUpdates {
     private var generation = 0
 
     func start(address: String, token: String, onChange: @escaping @MainActor (HAEntity) -> Void,
+               onReady: @escaping @MainActor () -> Void,
                onReconnect: @escaping @MainActor () async -> Void) {
         stop()
         generation += 1
@@ -18,7 +19,7 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, onChange: onChange)
+                    try await self.listen(address: address, token: token, onChange: onChange, onReady: onReady)
                     delay = 1
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
@@ -41,7 +42,8 @@ final class StevoraLiveUpdates {
     }
 
     private func listen(address: String, token: String,
-                        onChange: @escaping @MainActor (HAEntity) -> Void) async throws {
+                        onChange: @escaping @MainActor (HAEntity) -> Void,
+                        onReady: @escaping @MainActor () -> Void) async throws {
         guard var parts = URLComponents(string: address),
               parts.scheme?.lowercased() == "https", parts.host != nil,
               parts.user == nil, parts.password == nil,
@@ -83,6 +85,7 @@ final class StevoraLiveUpdates {
                         throw HAError.unexpectedResponse
                     }
                     subscribed = true
+                    onReady()
                 }
             case "event":
                 guard subscribed,
