@@ -141,6 +141,25 @@ final class StevoraModel: ObservableObject {
         connectionMode = "STEVORA Ecosystem"
     }
 
+    // STEVORA owns the room and entity projection when its manifest is valid.
+    // HA states supply live values only; they never expand the STEVORA device list.
+    var projectedRooms: [StevoraManifest.Room] {
+        stevoraManifest?.rooms ?? []
+    }
+
+    var projectedEntities: [HAEntity] {
+        guard let manifest = stevoraManifest else { return entities }
+        let allowed = Set(manifest.mappings.values.flatMap { $0 })
+        return entities.filter { allowed.contains($0.id) }
+    }
+
+    func projectedEntities(in roomID: String) -> [HAEntity] {
+        guard let manifest = stevoraManifest else { return projectedEntities }
+        guard roomID != "all" else { return projectedEntities }
+        let ids = Set(manifest.mappings[roomID] ?? [])
+        return projectedEntities.filter { ids.contains($0.id) }
+    }
+
     func refresh() async {
         guard connected else { return }
         do { entities = try await client().states(); error = nil }
