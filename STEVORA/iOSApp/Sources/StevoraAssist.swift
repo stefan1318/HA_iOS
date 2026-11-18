@@ -250,7 +250,7 @@ struct StevoraAssistView: View {
                     .animation(.spring(response: 0.38, dampingFraction: 0.84),
                                value: assistant.messages.count)
                 }
-                .safeAreaPadding(.bottom, 12)
+                .padding(.bottom, 12)
                 .onChange(of: assistant.messages.count) { _ in
                     if let last = assistant.messages.last {
                         withAnimation(.easeOut(duration: 0.26)) {
