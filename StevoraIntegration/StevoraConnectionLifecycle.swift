@@ -19,7 +19,7 @@ public final class StevoraConnectionLifecycle {
 
     public func onConnected() async {
         switch await coordinator.refresh() {
-        case .updated(let manifest): onManifest(manifest)
+        case let .updated(manifest): onManifest(manifest)
         case .nativeHomeAssistantFallback: onFallback()
         case .unchanged: break
         }
