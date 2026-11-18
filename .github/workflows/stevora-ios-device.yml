@@ -2,7 +2,7 @@ name: STEVORA iOS device IPA (unsigned)
 
 # IPA builds are deliberate release/test candidates, not every source commit.
 # Updating this workflow triggers a fresh IPA build of the latest branch revision.
-# STEVORA Ecosystem compatibility build: dynamic device discovery, no test-home defaults, scoped favorites.
+# STEVORA Ecosystem contract parity with Android: offline safety, security, device scope and release gate.
 # Release candidate includes validated pipeline isolation across account switching.
 on:
   workflow_dispatch:
@@ -29,6 +29,8 @@ jobs:
         run: xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Verify STEVORA Ecosystem policy gate
+        run: python3 scripts/check_stevora_ecosystem_ios.py
       - name: Generate STEVORA icon
         run: |
           swift STEVORA/iOSApp/Branding/generate-icon.swift STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
