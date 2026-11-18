@@ -1,0 +1,60 @@
+name: STEVORA iOS product beta (unsigned IPA)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/stevora-ios
+    paths:
+      - 'Sources/**'
+      - 'Configuration/**'
+      - 'HomeAssistant.xcodeproj/**'
+      - '.github/workflows/stevora-product-beta.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stevora-ios-beta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/stevora-ios'
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout STEVORA source
+        uses: actions/checkout@v4
+      - name: Verify STEVORA identity and manifest implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'BUNDLE_ID_PREFIX = com.stevora' Configuration/HomeAssistant.xcconfig
+          grep -Fq 'HAStevoraHomeProjection' Sources/Shared/API/WebSocket/HAPanel.swift
+          grep -Fq 'connectionModeLabel' Sources/Shared/API/WebSocket/HAPanel.swift
+          grep -Fq 'stevoraDiscovery()' Sources/Shared/API/HAAPI.swift
+      - name: Build STEVORA iOS app for device (unsigned)
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project HomeAssistant.xcodeproj -scheme App-Debug -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/stevora-derived" CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(find "$RUNNER_TEMP/stevora-derived/Build/Products/Debug-iphoneos" -maxdepth 1 -type d -name '*.app' | head -1)"
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/stevora-ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/stevora-ipa/Payload/"
+          (cd "$RUNNER_TEMP/stevora-ipa" && zip -qr "$GITHUB_WORKSPACE/STEVORA-iOS-unsigned.ipa" Payload)
+          printf 'commit=%s\nbranch=%s\nsigning=unsigned\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" > build-provenance.txt
+      - name: Upload unsigned IPA for signing and device tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: STEVORA-iOS-unsigned-${{ github.sha }}
+          path: |
+            STEVORA-iOS-unsigned.ipa
+            build-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
