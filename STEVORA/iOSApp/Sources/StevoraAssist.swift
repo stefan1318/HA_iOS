@@ -22,7 +22,7 @@ final class StevoraAssistModel: ObservableObject {
 
     private var conversationID: String?
     private var selectedPipelineID: String?
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "bg-BG"))
+    private var recognizer: SFSpeechRecognizer?
     private let audioEngine = AVAudioEngine()
     private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
@@ -99,7 +99,6 @@ final class StevoraAssistModel: ObservableObject {
 
     func startListening() async {
         guard route != nil else { error = "Verify account and Assist pipeline first"; return }
-        guard recognizer?.isAvailable == true else { error = "Speech recognition is not available on this device or language."; return }
         speaker.stopSpeaking(at: .immediate)
         guard !listening else { stopListening(); return }
         let authorized = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -107,17 +106,25 @@ final class StevoraAssistModel: ObservableObject {
                 continuation.resume(returning: status == .authorized)
             }
         }
-        guard authorized else { error = "Speech recognition permission required"; return }
+        guard authorized else { error = "Разреши разпознаването на реч в Settings → STEVORA."; return }
+        let locales = ["bg-BG", "en-US", "en-GB"]
+        recognizer = locales.compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
+            .first(where: { $0.isAvailable })
+        guard recognizer != nil else {
+            error = "Няма налично разпознаване на реч. Провери Siri, диктовката и интернет връзката."
+            return
+        }
         let microphone = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in continuation.resume(returning: granted) }
         }
-        guard microphone else { error = "Microphone permission required"; return }
+        guard microphone else { error = "Разреши достъп до микрофона в Settings → STEVORA."; return }
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .duckOthers])
             try session.setActive(true)
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
+            request.requiresOnDeviceRecognition = false
             speechRequest = request
             let input = audioEngine.inputNode
             let format = input.outputFormat(forBus: 0)
@@ -243,6 +250,7 @@ struct StevoraAssistView: View {
                     .animation(.spring(response: 0.38, dampingFraction: 0.84),
                                value: assistant.messages.count)
                 }
+                .padding(.bottom, 12)
                 .onChange(of: assistant.messages.count) { _ in
                     if let last = assistant.messages.last {
                         withAnimation(.easeOut(duration: 0.26)) {

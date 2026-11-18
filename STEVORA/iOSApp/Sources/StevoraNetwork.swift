@@ -4,6 +4,7 @@ import Security
 struct HAEntity: Decodable, Identifiable {
     struct Attributes: Decodable {
         let friendly_name: String?
+        let device_class: String?
         let temperature: Double?
         let current_temperature: Double?
         let unit_of_measurement: String?

@@ -9,7 +9,9 @@ final class StevoraLiveUpdates {
     private var generation = 0
 
     func start(address: String, token: String, onChange: @escaping @MainActor (HAEntity) -> Void,
-               onReconnect: @escaping @MainActor () async -> Void) {
+               onReady: @escaping @MainActor () -> Void,
+               onReconnect: @escaping @MainActor () async -> Void,
+               onManifest: @escaping @MainActor (StevoraManifest?) -> Void) {
         stop()
         generation += 1
         let current = generation
@@ -18,7 +20,7 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, onChange: onChange)
+                    try await self.listen(address: address, token: token, onChange: onChange, onReady: onReady, onManifest: onManifest)
                     delay = 1
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
@@ -41,7 +43,9 @@ final class StevoraLiveUpdates {
     }
 
     private func listen(address: String, token: String,
-                        onChange: @escaping @MainActor (HAEntity) -> Void) async throws {
+                        onChange: @escaping @MainActor (HAEntity) -> Void,
+                        onReady: @escaping @MainActor () -> Void,
+                        onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
         guard var parts = URLComponents(string: address),
               parts.scheme?.lowercased() == "https", parts.host != nil,
               parts.user == nil, parts.password == nil,
@@ -59,6 +63,7 @@ final class StevoraLiveUpdates {
 
         var authenticated = false
         var subscribed = false
+        var manifestRequested = false
         while !Task.isCancelled {
             let message = try await task.receive()
             let data: Data
@@ -83,6 +88,19 @@ final class StevoraLiveUpdates {
                         throw HAError.unexpectedResponse
                     }
                     subscribed = true
+                    onReady()
+                    // Optional capability detection on the authenticated Home Assistant socket.
+                    try await send(["id": 2, "type": "stevora/manifest"], on: task)
+                    manifestRequested = true
+                } else if let id = json["id"] as? Int, id == 2, manifestRequested {
+                    if json["success"] as? Bool == true,
+                       let payload = json["result"], JSONSerialization.isValidJSONObject(payload),
+                       let data = try? JSONSerialization.data(withJSONObject: payload),
+                       let manifest = try? JSONDecoder().decode(StevoraManifest.self, from: data) {
+                        onManifest(manifest)
+                    } else {
+                        onManifest(nil)
+                    }
                 }
             case "event":
                 guard subscribed,

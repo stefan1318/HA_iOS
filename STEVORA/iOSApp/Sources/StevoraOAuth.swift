@@ -18,14 +18,14 @@ final class StevoraOAuth: NSObject, ASWebAuthenticationPresentationContextProvid
         var components = URLComponents(url: server.appendingPathComponent("auth/authorize"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "client_id", value: "https://stevora.com"),
-            URLQueryItem(name: "redirect_uri", value: "stevora://auth/callback"),
+            URLQueryItem(name: "redirect_uri", value: "com.stevora://auth/callback"),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256")
         ]
         guard let url = components.url else { throw HAError.invalidURL }
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
-            let auth = ASWebAuthenticationSession(url: url, callbackURLScheme: "stevora") { url, error in
+            let auth = ASWebAuthenticationSession(url: url, callbackURLScheme: "com.stevora") { url, error in
                 if let url { continuation.resume(returning: url) }
                 else { continuation.resume(throwing: error ?? HAError.unauthorized) }
             }
@@ -38,7 +38,7 @@ final class StevoraOAuth: NSObject, ASWebAuthenticationPresentationContextProvid
             }
         }
         session = nil
-        guard callback.scheme == "stevora", callback.host == "auth",
+        guard callback.scheme == "com.stevora", callback.host == "auth",
               callback.path == "/callback",
               let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "code" })?.value else {
@@ -74,7 +74,7 @@ enum StevoraTokenAPI {
             "grant_type": "authorization_code", "code": code,
             "client_id": "https://stevora.com",
             "code_verifier": verifier,
-            "redirect_uri": "stevora://auth/callback"
+            "redirect_uri": "com.stevora://auth/callback"
         ])
     }
 

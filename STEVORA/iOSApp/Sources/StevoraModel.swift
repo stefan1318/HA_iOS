@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 @MainActor
 final class StevoraModel: ObservableObject {
@@ -7,10 +8,12 @@ final class StevoraModel: ObservableObject {
     private let oauth = StevoraOAuth()
     @Published var isOAuthSession = false
     @Published var selectedRoom = "all"
-    @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "stevora.favorites") ?? [])
+    @Published var favorites: Set<String> = []
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
+    @Published private(set) var connectionMode = "Home Assistant"
+    @Published private(set) var stevoraManifest: StevoraManifest?
     @Published var liveConnected = false
     @Published var busy = false
     @Published var error: String?
@@ -55,9 +58,14 @@ final class StevoraModel: ObservableObject {
         await connect(persist: false)
     }
 
+    private var favoriteKey: String {
+        let host = (URL(string: address)?.host ?? address).lowercased()
+        let fingerprint = SHA256.hash(data: Data(token.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        return "stevora.favorites.\(host).\(fingerprint)"
+    }
     func toggleFavorite(_ id: String) {
         if favorites.contains(id) { favorites.remove(id) } else { favorites.insert(id) }
-        UserDefaults.standard.set(Array(favorites), forKey: "stevora.favorites")
+        UserDefaults.standard.set(Array(favorites), forKey: favoriteKey)
     }
 
     func connect(persist: Bool = true) async {
@@ -87,7 +95,10 @@ final class StevoraModel: ObservableObject {
             }
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
+            favorites = Set(UserDefaults.standard.stringArray(forKey: favoriteKey) ?? [])
             connected = true
+            connectionMode = "Home Assistant"
+            stevoraManifest = nil
             liveConnected = false
             liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
                 guard let self, self.connected else { return }
@@ -97,16 +108,37 @@ final class StevoraModel: ObservableObject {
                 } else {
                     self.entities.append(entity)
                 }
+            }, onReady: { [weak self] in
+                self?.liveConnected = true
             }, onReconnect: { [weak self] in
                 self?.liveConnected = false
+                self?.connectionMode = "Home Assistant"
+                self?.stevoraManifest = nil
                 await self?.refresh()
+            }, onManifest: { [weak self] manifest in
+                self?.receiveManifest(manifest)
             })
         } catch {
             liveUpdates.stop()
             connected = false
             liveConnected = false
+            connectionMode = "Home Assistant"
+            stevoraManifest = nil
             self.error = error.localizedDescription
         }
+    }
+
+    func receiveManifest(_ manifest: StevoraManifest?) {
+        guard let manifest, manifest.schemaVersion == "1.0", !manifest.installationId.isEmpty else {
+            stevoraManifest = nil
+            connectionMode = "Home Assistant"
+            return
+        }
+        if let previous = stevoraManifest,
+           previous.installationId == manifest.installationId,
+           previous.revision > manifest.revision { return }
+        stevoraManifest = manifest
+        connectionMode = "STEVORA Ecosystem"
     }
 
     func refresh() async {
@@ -116,6 +148,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func toggle(_ entity: HAEntity) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard ["light", "switch", "fan"].contains(entity.domain) else { return }
         do {
             try await client().service(domain: entity.domain,
@@ -126,6 +159,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setTemperature(_ entity: HAEntity, value: Double) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate" else { return }
         do {
             try await client().service(domain: "climate", action: "set_temperature",
@@ -135,6 +169,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setClimateMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.hvac_modes?.contains(mode) == true else { return }
         do {
@@ -145,6 +180,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setFanMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.fan_modes?.contains(mode) == true else { return }
         do {
@@ -155,6 +191,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setPresetMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.preset_modes?.contains(mode) == true else { return }
         do {
@@ -165,6 +202,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setLightEffect(_ entity: HAEntity, effect: String) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light",
               entity.attributes.effect_list?.contains(effect) == true else { return }
         do {
@@ -175,6 +213,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setBrightness(_ entity: HAEntity, value: Double) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light" else { return }
         do {
             try await client().service(domain: "light", action: "turn_on",
@@ -184,6 +223,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setColor(_ entity: HAEntity, rgb: [Int]) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light", rgb.count == 3,
               rgb.allSatisfy({ (0...255).contains($0) }) else { return }
         do {
@@ -194,6 +234,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func runRoutine(_ entity: HAEntity) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted routine"; return }
         guard ["scene", "script", "automation"].contains(entity.domain) else { return }
         do {
             let action = entity.domain == "automation" ? "trigger" : "turn_on"
@@ -215,7 +256,10 @@ final class StevoraModel: ObservableObject {
         token = ""
         connected = false
         liveConnected = false
+        connectionMode = "Home Assistant"
+        stevoraManifest = nil
         entities = []
+        favorites = []
         error = nil
     }
 }
