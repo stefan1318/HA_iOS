@@ -123,6 +123,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func toggle(_ entity: HAEntity) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard ["light", "switch", "fan"].contains(entity.domain) else { return }
         do {
             try await client().service(domain: entity.domain,
@@ -133,6 +134,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setTemperature(_ entity: HAEntity, value: Double) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate" else { return }
         do {
             try await client().service(domain: "climate", action: "set_temperature",
@@ -142,6 +144,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setClimateMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.hvac_modes?.contains(mode) == true else { return }
         do {
@@ -152,6 +155,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setFanMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.fan_modes?.contains(mode) == true else { return }
         do {
@@ -162,6 +166,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setPresetMode(_ entity: HAEntity, mode: String) async {
+        guard connected && liveConnected else { error = "Offline: controls disabled"; return }
         guard entity.domain == "climate",
               entity.attributes.preset_modes?.contains(mode) == true else { return }
         do {
@@ -172,6 +177,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setLightEffect(_ entity: HAEntity, effect: String) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light",
               entity.attributes.effect_list?.contains(effect) == true else { return }
         do {
@@ -182,6 +188,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setBrightness(_ entity: HAEntity, value: Double) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light" else { return }
         do {
             try await client().service(domain: "light", action: "turn_on",
@@ -191,6 +198,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setColor(_ entity: HAEntity, rgb: [Int]) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
         guard entity.domain == "light", rgb.count == 3,
               rgb.allSatisfy({ (0...255).contains($0) }) else { return }
         do {
@@ -201,6 +209,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func runRoutine(_ entity: HAEntity) async {
+        guard connected && liveConnected && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted routine"; return }
         guard ["scene", "script", "automation"].contains(entity.domain) else { return }
         do {
             let action = entity.domain == "automation" ? "trigger" : "turn_on"
