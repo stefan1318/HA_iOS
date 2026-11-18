@@ -4,6 +4,7 @@ name: STEVORA iOS device IPA (unsigned)
 # Updating this workflow triggers a fresh IPA build of the latest branch revision.
 # STEVORA iOS 2.2-2.5 combined preview: native climate, lighting, voice and Assist.
 # Release candidate includes validated pipeline isolation across account switching.
+# Manifest-owned room and entity projection candidate; keep the tested IPA baseline intact.
 on:
   workflow_dispatch:
   push:
