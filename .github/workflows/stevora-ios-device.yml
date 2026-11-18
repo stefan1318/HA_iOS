@@ -2,7 +2,7 @@ name: STEVORA iOS device IPA (unsigned)
 
 # IPA builds are deliberate release/test candidates, not every source commit.
 # Updating this workflow triggers a fresh IPA build of the latest branch revision.
-# STEVORA iOS 2.5 integration test retry: fix iOS 16 deployment API compatibility in Assist.
+# STEVORA Ecosystem compatibility build: dynamic device discovery, no test-home defaults, scoped favorites.
 # Release candidate includes validated pipeline isolation across account switching.
 on:
   workflow_dispatch:
