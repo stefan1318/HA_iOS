@@ -1818,8 +1818,14 @@ extension HomeAssistantAPI: HAConnectionDelegate {
             // Optional discovery through the current OAuth-authenticated WebSocket.
             // Failure must not interrupt native Home Assistant functionality.
             connection.send(.stevoraDiscovery()).promise.done { manifest in
+                Task { @MainActor in
+                    HAStevoraHomeProjection.shared.apply(manifest)
+                }
                 Current.Log.info("STEVORA manifest revision available: \(manifest.revision)")
             }.catch { _ in
+                Task { @MainActor in
+                    HAStevoraHomeProjection.shared.clear()
+                }
                 Current.Log.info("STEVORA discovery unavailable; native Home Assistant mode")
             }
         case .disconnected(reason: .rejected):
