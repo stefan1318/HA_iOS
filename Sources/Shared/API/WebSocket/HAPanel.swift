@@ -213,10 +213,16 @@ private struct HAPanelsCacheKey: HACacheKey {
 public struct HAStevoraDiscovery: HADataDecodable {
     public let installationId: String
     public let revision: Int
+    public let schemaVersion: String
+    public let rooms: [[String: String]]
+    public let mappings: [String: [String]]
 
     public init(data: HAData) throws {
         self.installationId = try data.decode("installation_id")
         self.revision = try data.decode("revision")
+        self.schemaVersion = try data.decode("schema_version")
+        self.rooms = (try? data.decode("rooms")) ?? []
+        self.mappings = (try? data.decode("mappings")) ?? [:]
     }
 }
 
