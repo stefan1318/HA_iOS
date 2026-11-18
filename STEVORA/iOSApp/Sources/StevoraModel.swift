@@ -7,7 +7,7 @@ final class StevoraModel: ObservableObject {
     private let oauth = StevoraOAuth()
     @Published var isOAuthSession = false
     @Published var selectedRoom = "all"
-    @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "stevora.favorites") ?? [])
+    @Published var favorites: Set<String> = []
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
@@ -55,9 +55,15 @@ final class StevoraModel: ObservableObject {
         await connect(persist: false)
     }
 
+    private var favoriteKey: String {
+        let host = (URL(string: address)?.host ?? address).lowercased()
+        return "stevora.favorites.\(host).\(accountScope)"
+    }
+    @Published var accountScope = "default"
+
     func toggleFavorite(_ id: String) {
         if favorites.contains(id) { favorites.remove(id) } else { favorites.insert(id) }
-        UserDefaults.standard.set(Array(favorites), forKey: "stevora.favorites")
+        UserDefaults.standard.set(Array(favorites), forKey: favoriteKey)
     }
 
     func connect(persist: Bool = true) async {
@@ -87,6 +93,7 @@ final class StevoraModel: ObservableObject {
             }
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
+            favorites = Set(UserDefaults.standard.stringArray(forKey: favoriteKey) ?? [])
             connected = true
             liveConnected = false
             liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
@@ -216,6 +223,7 @@ final class StevoraModel: ObservableObject {
         connected = false
         liveConnected = false
         entities = []
+        favorites = []
         error = nil
     }
 }
