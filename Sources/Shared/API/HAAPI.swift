@@ -1815,6 +1815,13 @@ extension HomeAssistantAPI: HAConnectionDelegate {
         switch state {
         case .ready:
             resetRejectedReconnectRecovery()
+            // Probe STEVORA on this server's existing authenticated connection.
+            // The app continues using native Home Assistant when not installed or unauthorized.
+            connection.send(.stevoraDiscovery()).promise.done { manifest in
+                Current.Log.info("STEVORA manifest revision available: \(manifest.revision)")
+            }.catch { _ in
+                Current.Log.info("STEVORA discovery unavailable; native Home Assistant mode")
+            }
         case .disconnected(reason: .rejected):
             invalidateRejectedAccessToken()
             scheduleRejectedReconnectRecoveryIfNeeded()
