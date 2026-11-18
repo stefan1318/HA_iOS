@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 @MainActor
 final class StevoraModel: ObservableObject {
@@ -57,10 +58,9 @@ final class StevoraModel: ObservableObject {
 
     private var favoriteKey: String {
         let host = (URL(string: address)?.host ?? address).lowercased()
-        return "stevora.favorites.\(host).\(accountScope)"
+        let fingerprint = SHA256.hash(data: Data(token.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        return "stevora.favorites.\(host).\(fingerprint)"
     }
-    @Published var accountScope = "default"
-
     func toggleFavorite(_ id: String) {
         if favorites.contains(id) { favorites.remove(id) } else { favorites.insert(id) }
         UserDefaults.standard.set(Array(favorites), forKey: favoriteKey)
