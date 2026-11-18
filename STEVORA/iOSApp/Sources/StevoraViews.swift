@@ -452,6 +452,7 @@ private struct StevoraDashboard: View {
                     Text("English").tag("en")
                 }.pickerStyle(.segmented)
                 Text(model.address).font(.caption).foregroundStyle(Brand.muted)
+                Text(model.connectionMode).font(.caption).foregroundStyle(Brand.muted)
                 Button(role: .destructive) { model.logout() } label: {
                     Label(model.localized("Изход от профила", "Sign out"),
                           systemImage: "rectangle.portrait.and.arrow.right")

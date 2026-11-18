@@ -12,6 +12,8 @@ final class StevoraModel: ObservableObject {
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
     @Published var token = ""
     @Published var connected = false
+    @Published private(set) var connectionMode = "Home Assistant"
+    @Published private(set) var stevoraManifest: StevoraManifest?
     @Published var liveConnected = false
     @Published var busy = false
     @Published var error: String?
@@ -95,6 +97,8 @@ final class StevoraModel: ObservableObject {
             entities = loaded
             favorites = Set(UserDefaults.standard.stringArray(forKey: favoriteKey) ?? [])
             connected = true
+            connectionMode = "Home Assistant"
+            stevoraManifest = nil
             liveConnected = false
             liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
                 guard let self, self.connected else { return }
@@ -108,14 +112,33 @@ final class StevoraModel: ObservableObject {
                 self?.liveConnected = true
             }, onReconnect: { [weak self] in
                 self?.liveConnected = false
+                self?.connectionMode = "Home Assistant"
+                self?.stevoraManifest = nil
                 await self?.refresh()
+            }, onManifest: { [weak self] manifest in
+                self?.receiveManifest(manifest)
             })
         } catch {
             liveUpdates.stop()
             connected = false
             liveConnected = false
+            connectionMode = "Home Assistant"
+            stevoraManifest = nil
             self.error = error.localizedDescription
         }
+    }
+
+    func receiveManifest(_ manifest: StevoraManifest?) {
+        guard let manifest, manifest.schemaVersion == "1.0", !manifest.installationId.isEmpty else {
+            stevoraManifest = nil
+            connectionMode = "Home Assistant"
+            return
+        }
+        if let previous = stevoraManifest,
+           previous.installationId == manifest.installationId,
+           previous.revision > manifest.revision { return }
+        stevoraManifest = manifest
+        connectionMode = "STEVORA Ecosystem"
     }
 
     func refresh() async {
@@ -233,6 +256,8 @@ final class StevoraModel: ObservableObject {
         token = ""
         connected = false
         liveConnected = false
+        connectionMode = "Home Assistant"
+        stevoraManifest = nil
         entities = []
         favorites = []
         error = nil
