@@ -29,8 +29,7 @@ public final class StevoraSyncCoordinator {
                 return .nativeHomeAssistantFallback
             }
             if cached?.installationId == manifest.installationId,
-               cached?.revision == manifest.revision
-            {
+               cached?.revision == manifest.revision {
                 return .unchanged
             }
             cached = manifest
