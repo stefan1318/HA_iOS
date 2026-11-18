@@ -27,8 +27,12 @@ jobs:
       - name: Verify STEVORA product identity
         run: |
           set -euo pipefail
-          if ! grep -Ril --include='*.swift' --include='*.xcconfig' --include='*.plist' 'stevora' Sources Configuration 2>/dev/null | grep -q .; then
-            echo "::error::STEVORA branding not verified in iOS product source. Refusing to publish upstream HA IPA."
+          if ! grep -Eq '^BUNDLE_ID_PREFIX[[:space:]]*=[[:space:]]*com[.]stevora' Configuration/HomeAssistant.xcconfig; then
+            echo "::error::Upstream iOS bundle identifier detected. No STEVORA IPA may be published."
+            exit 1
+          fi
+          if ! git grep -iq stevor -- Sources Configuration; then
+            echo "::error::No STEVORA source branding detected."
             exit 1
           fi
       - name: Select Xcode 27
@@ -59,6 +63,18 @@ jobs:
           ditto "$APP" "$RUNNER_TEMP/ipa/Payload/HomeAssistant.app"
           cd "$RUNNER_TEMP/ipa"
           zip -qry "$GITHUB_WORKSPACE/STEVORA-iOS-AltStore-unsigned.ipa" Payload
+      - name: Verify packaged product identity
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ipa/Payload/HomeAssistant.app"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
+          case "$BUNDLE_ID" in
+            com.stevora.*) ;;
+            *) echo "::error::Non-STEVORA bundle ID: $BUNDLE_ID"; exit 1 ;;
+          esac
+          /usr/libexec/PlistBuddy -c 'Print CFBundleDisplayName' "$APP/Info.plist" | grep -iq stevor || {
+            echo "::error::Non-STEVORA display name"; exit 1;
+          }
       - name: Upload IPA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
