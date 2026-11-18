@@ -241,6 +241,14 @@ public final class HAStevoraHomeProjection {
 
     public private(set) var current: HAStevoraDiscovery?
 
+    /// Settings label. An unavailable manifest means native HA mode, not proof
+    /// that the remote server has no STEVORA components.
+    public var connectionModeLabel: String {
+        current == nil
+            ? "Home Assistant (native mode) · STEVORA не е открита"
+            : "STEVORA Ecosystem · Свързан"
+    }
+
     private init() {}
 
     public func apply(_ manifest: HAStevoraDiscovery) {
