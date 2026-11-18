@@ -5,6 +5,7 @@ name: STEVORA iOS device IPA (unsigned)
 # STEVORA iOS 2.2-2.5 combined preview: native climate, lighting, voice and Assist.
 # Release candidate includes validated pipeline isolation across account switching.
 # Manifest-owned room and entity projection candidate; keep the tested IPA baseline intact.
+# Local-HTTP opt-in policy gate correction requires a fresh device IPA build.
 on:
   workflow_dispatch:
   push:
