@@ -9,6 +9,8 @@ on:
       - 'Sources/**'
       - 'Configuration/**'
       - 'HomeAssistant.xcodeproj/**'
+      - 'scripts/stevora-prepare-icons.py'
+      - 'STEVORA/iOSApp/Branding/**'
       - '.github/workflows/stevora-product-beta.yml'
 
 permissions:
@@ -38,6 +40,8 @@ jobs:
           grep -Fq 'HAStevoraHomeProjection' Sources/Shared/API/WebSocket/HAPanel.swift
           grep -Fq 'connectionModeLabel' Sources/Shared/API/WebSocket/HAPanel.swift
           grep -Fq 'stevoraDiscovery()' Sources/Shared/API/HAAPI.swift
+      - name: Generate and validate official STEVORA app icons
+        run: python3 scripts/stevora-prepare-icons.py
       - name: Build STEVORA iOS app for device (unsigned)
         shell: bash
         run: |
