@@ -245,7 +245,7 @@ public final class HAStevoraHomeProjection {
     /// that the remote server has no STEVORA components.
     public var connectionModeLabel: String {
         current == nil
-            ? "Home Assistant (native mode) · STEVORA не е открита"
+            ? "Home Assistant режим · STEVORA не е потвърдена"
             : "STEVORA Ecosystem · Свързан"
     }
 
