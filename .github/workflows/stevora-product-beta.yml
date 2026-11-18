@@ -21,11 +21,15 @@ concurrency:
 jobs:
   build:
     if: github.ref == 'refs/heads/feature/stevora-ios'
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 120
     steps:
       - name: Checkout STEVORA source
         uses: actions/checkout@v4
+      - name: Report selected Xcode toolchain
+        run: |
+          xcode-select -p
+          xcodebuild -version
       - name: Verify STEVORA identity and manifest implementation
         shell: bash
         run: |
