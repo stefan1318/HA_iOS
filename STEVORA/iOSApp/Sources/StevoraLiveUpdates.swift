@@ -8,7 +8,7 @@ final class StevoraLiveUpdates {
     private var worker: Task<Void, Never>?
     private var generation = 0
 
-    func start(address: String, token: String, onChange: @escaping @MainActor (HAEntity) -> Void,
+    func start(address: String, token: String, allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
                onReady: @escaping @MainActor () -> Void,
                onReconnect: @escaping @MainActor () async -> Void,
                onManifest: @escaping @MainActor (StevoraManifest?) -> Void) {
@@ -20,7 +20,7 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, onChange: onChange, onReady: onReady, onManifest: onManifest)
+                    try await self.listen(address: address, token: token, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onManifest: onManifest)
                     delay = 1
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
@@ -42,15 +42,14 @@ final class StevoraLiveUpdates {
         socket = nil
     }
 
-    private func listen(address: String, token: String,
+    private func listen(address: String, token: String, allowLocalHTTP: Bool,
                         onChange: @escaping @MainActor (HAEntity) -> Void,
                         onReady: @escaping @MainActor () -> Void,
                         onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
-        guard var parts = URLComponents(string: address),
-              parts.scheme?.lowercased() == "https", parts.host != nil,
-              parts.user == nil, parts.password == nil,
-              parts.query == nil, parts.fragment == nil else { throw HAError.invalidURL }
-        parts.scheme = "wss"
+        guard let baseURL = URL(string: address),
+              StevoraTransportPolicy.permits(baseURL, allowLocalHTTP: allowLocalHTTP),
+              var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw HAError.insecureConnection }
+        parts.scheme = baseURL.scheme?.lowercased() == "http" ? "ws" : "wss"
         parts.path = (parts.path.hasSuffix("/") ? String(parts.path.dropLast()) : parts.path) + "/api/websocket"
         guard let url = parts.url else { throw HAError.invalidURL }
         let task = URLSession.shared.webSocketTask(with: url)
