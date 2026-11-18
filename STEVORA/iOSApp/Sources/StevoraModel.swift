@@ -10,6 +10,7 @@ final class StevoraModel: ObservableObject {
     @Published var selectedRoom = "all"
     @Published var favorites: Set<String> = []
     @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
+    @Published var allowLocalHTTP = UserDefaults.standard.bool(forKey: "stevora.allowLocalHTTP")
     @Published var token = ""
     @Published var connected = false
     @Published private(set) var connectionMode = "Home Assistant"
@@ -31,7 +32,7 @@ final class StevoraModel: ObservableObject {
     func localized(_ bg: String, _ en: String) -> String { language == "bg" ? bg : en }
 
     private func client() throws -> HAClient {
-        try HAClient(address: address, token: token)
+        try HAClient(address: address, token: token, allowLocalHTTP: allowLocalHTTP)
     }
 
     func signIn() async {
@@ -40,7 +41,7 @@ final class StevoraModel: ObservableObject {
         error = nil
         defer { busy = false }
         do {
-            let url = try HAClient(address: address, token: "temporary").baseURL
+            let url = try HAClient(address: address, token: "temporary", allowLocalHTTP: allowLocalHTTP).baseURL
             let auth = try await oauth.authorizationCode(server: url)
             let tokens = try await StevoraTokenAPI.exchange(server: url, code: auth.code, verifier: auth.verifier)
             guard CredentialStore.save(tokens.access_token, key: "access_token") else { throw HAError.unexpectedResponse }
@@ -100,7 +101,7 @@ final class StevoraModel: ObservableObject {
             connectionMode = "Home Assistant"
             stevoraManifest = nil
             liveConnected = false
-            liveUpdates.start(address: address, token: token, onChange: { [weak self] entity in
+            liveUpdates.start(address: address, token: token, allowLocalHTTP: allowLocalHTTP, onChange: { [weak self] entity in
                 guard let self, self.connected else { return }
                 self.liveConnected = true
                 if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
@@ -260,6 +261,11 @@ final class StevoraModel: ObservableObject {
             try await client().service(domain: entity.domain, action: action, entityID: entity.id)
             await refresh()
         } catch { self.error = error.localizedDescription }
+    }
+
+    func setLocalHTTPAllowed(_ allowed: Bool) {
+        allowLocalHTTP = allowed
+        UserDefaults.standard.set(allowed, forKey: "stevora.allowLocalHTTP")
     }
 
     func setLanguage(_ newValue: String) {
