@@ -1,0 +1,68 @@
+name: STEVORA iOS AltStore IPA Build
+
+'on':
+  push:
+    paths:
+      - '.github/workflows/stevora-altstore-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stevora-altstore-iphone
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Unsigned iPhone IPA for AltStore
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - name: Checkout STEVORA iOS development branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feature/stevora-manifest-sync-v1
+          persist-credentials: false
+      - name: Select Xcode 27
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_27.1.app/Contents/Developer
+          xcodebuild -version
+      - name: Build unsigned iPhone app
+        run: |
+          set -o pipefail
+          xcodebuild -project HomeAssistant.xcodeproj \
+            -scheme App-Debug \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/stevora-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/stevora-build.log"
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/stevora-build/Build/Products/Debug-iphoneos/HomeAssistant.app"
+          if [ ! -d "$APP" ]; then
+            find "$RUNNER_TEMP/stevora-build/Build/Products" -name '*.app' -print
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          ditto "$APP" "$RUNNER_TEMP/ipa/Payload/HomeAssistant.app"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$GITHUB_WORKSPACE/STEVORA-iOS-AltStore-unsigned.ipa" Payload
+      - name: Upload IPA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: STEVORA-iOS-AltStore-unsigned
+          path: STEVORA-iOS-AltStore-unsigned.ipa
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: STEVORA-iOS-AltStore-build-log
+          path: ${{ runner.temp }}/stevora-build.log
+          if-no-files-found: ignore
