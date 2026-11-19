@@ -110,20 +110,32 @@ actor StevoraAssistantGateway {
         guard let name = user["name"] as? String,
               user["is_admin"] is Bool else { throw StevoraAssistantError.authentication }
         let elevated = isAdmin(user, owner: user["is_owner"] as? Bool ?? false)
-        let expected = elevated
-            ? "conversation.living_room_openai_conversation"
-            : "conversation.openai_conversation_for_panels"
-        let result = try await request("assist_pipeline/pipeline/list")
-        guard let pipelines = result["pipelines"] as? [[String: Any]] else {
+        // Server-managed routing is authoritative. Never derive a pipeline from
+        // the user's admin role or a hardcoded conversation engine.
+        let resolved = try await request("stevora/assistants/resolve")
+        let list = try await request("assist_pipeline/pipeline/list")
+        guard let pipelines = list["pipelines"] as? [[String: Any]] else {
             throw StevoraAssistantError.invalidResponse
         }
-        let matching = pipelines.filter {
-            ($0["conversation_engine"] as? String)?.caseInsensitiveCompare(expected) == .orderedSame
+        let selected = resolved["pipeline_id"] as? String
+        let candidate: [String: Any]
+        if let selected {
+            guard let match = pipelines.first(where: { $0["id"] as? String == selected }) else {
+                throw StevoraAssistantError.noMatchingPipeline(selected)
+            }
+            candidate = match
+        } else {
+            // The HA native default is the only fallback; no role-specific routing.
+            let defaults = try await request("assist_pipeline/pipeline/get")
+            guard let defaultID = defaults["preferred_pipeline"] as? String,
+                  let match = pipelines.first(where: { $0["id"] as? String == defaultID }) else {
+                throw StevoraAssistantError.noMatchingPipeline("Home Assistant default")
+            }
+            candidate = match
         }
-        guard !matching.isEmpty else { throw StevoraAssistantError.noMatchingPipeline(expected) }
-        guard matching.count == 1 else { throw StevoraAssistantError.ambiguousPipeline(expected) }
-        guard let candidate = matching.first,
-              let id = candidate["id"] as? String else { throw StevoraAssistantError.invalidResponse }
+        guard let id = candidate["id"] as? String else {
+            throw StevoraAssistantError.invalidResponse
+        }
         return StevoraAssistantRoute(
             pipelineID: id, pipelineName: candidate["name"] as? String ?? "STEVORA",
             accountName: name, isAdmin: elevated,
