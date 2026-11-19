@@ -9,6 +9,7 @@ enum StevoraAdminAPI {
         case roomsUpdate = "stevora/admin/rooms/update"
         case assistantsGet = "stevora/admin/assistants/get"
         case assistantsUpdate = "stevora/admin/assistants/update"
+        case assistantsResolve = "stevora/assistants/resolve"
     }
 
     struct Capabilities: Decodable {
@@ -19,6 +20,39 @@ enum StevoraAdminAPI {
             case roomManager = "room_manager"
             case assistantManager = "assistant_manager"
         }
+    }
+
+    struct AssistantPipeline: Decodable, Equatable {
+        let id: String
+        let name: String
+    }
+
+    struct AssistantSettings: Codable {
+        let defaultPipeline: String?
+        let userPipelines: [String: String]
+        enum CodingKeys: String, CodingKey {
+            case defaultPipeline = "default_pipeline"
+            case userPipelines = "user_pipelines"
+        }
+    }
+
+    struct AssistantResolution: Decodable {
+        let pipelineId: String?
+        let source: String
+        enum CodingKeys: String, CodingKey {
+            case pipelineId = "pipeline_id"
+            case source
+        }
+    }
+
+    static func updateAssistants(id: Int, expectedRevision: Int, settings: AssistantSettings) -> [String: Any] {
+        [
+            "id": id,
+            "type": Command.assistantsUpdate.rawValue,
+            "expected_revision": expectedRevision,
+            "default_pipeline": settings.defaultPipeline as Any? ?? NSNull(),
+            "user_pipelines": settings.userPipelines
+        ]
     }
 
     struct VisibilityPatch: Encodable {
