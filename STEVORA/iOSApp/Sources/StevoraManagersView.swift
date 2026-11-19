@@ -10,6 +10,8 @@ struct StevoraManagersView: View {
     @State private var roomAliases: [String: String] = [:]
     @State private var entityAliases: [String: String] = [:]
     @State private var roomOrder: [String] = []
+    @State private var bilingualRooms: [String: [String: String]] = [:]
+    @State private var bilingualEntities: [String: [String: String]] = [:]
     @State private var deviceProfiles: [String: StevoraAdminAPI.DeviceProfile] = [:]
     @State private var loading = false
     @State private var errorMessage: String?
@@ -33,6 +35,8 @@ struct StevoraManagersView: View {
             roomAliases = rooms?.roomAliases ?? [:]
             entityAliases = rooms?.entityAliases ?? [:]
             roomOrder = rooms?.roomOrder ?? []
+            bilingualRooms = rooms?.translations?.rooms ?? [:]
+            bilingualEntities = rooms?.translations?.entities ?? [:]
             deviceProfiles = rooms?.deviceProfiles ?? [:]
             assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: assistantData)
             selectedDefault = assistants?.settings.defaultPipeline ?? ""
@@ -72,6 +76,21 @@ struct StevoraManagersView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func saveTranslations(roomID: String? = nil, entityID: String? = nil) async {
+        guard let rooms else { return }
+        do {
+            let selectedRooms = roomID.map { [$0: bilingualRooms[$0] ?? [:]] } ?? [:]
+            let selectedEntities = entityID.map { [$0: bilingualEntities[$0] ?? [:]] } ?? [:]
+            _ = try await gateway().adminRequest("stevora/admin/translations/update", fields: [
+                "expected_revision": rooms.revision,
+                "rooms": selectedRooms, "entities": selectedEntities
+            ])
+            statusMessage = model.localized("Преводите са запазени", "Translations saved")
+            await load()
+            await model.refresh()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func saveDevice(_ entityID: String) async {
@@ -165,6 +184,17 @@ struct StevoraManagersView: View {
                             }
                         }
                     }
+                    ForEach(rooms.rooms) { room in
+                        DisclosureGroup(room.name + " · BG/EN") {
+                            ForEach(["bg", "en"], id: \.self) { locale in
+                                TextField(locale.uppercased(), text: Binding(
+                                    get: { bilingualRooms[room.id]?[locale] ?? "" },
+                                    set: { bilingualRooms[room.id, default: [:]][locale] = $0 }
+                                ))
+                            }
+                            Button("Save BG/EN") { Task { await saveTranslations(roomID: room.id) } }
+                        }
+                    }
                     Button(model.localized("Запази стаите", "Save rooms")) {
                         Task { await saveRoomLayout() }
                     }
@@ -194,6 +224,15 @@ struct StevoraManagersView: View {
                                     Image(systemName: entity.included ? "eye" : "eye.slash")
                                 }
                             }
+                        }
+                        DisclosureGroup("BG / EN") {
+                            ForEach(["bg", "en"], id: \.self) { locale in
+                                TextField(locale.uppercased(), text: Binding(
+                                    get: { bilingualEntities[entity.entityId]?[locale] ?? "" },
+                                    set: { bilingualEntities[entity.entityId, default: [:]][locale] = $0 }
+                                ))
+                            }
+                            Button("Save BG/EN") { Task { await saveTranslations(entityID: entity.entityId) } }
                         }
                         DisclosureGroup(model.localized("Персонализиране", "Customize")) {
                             TextField(model.localized("Име", "Name"), text: Binding(
