@@ -146,6 +146,12 @@ actor StevoraAssistantGateway {
         (user["is_admin"] as? Bool ?? false) || owner
     }
 
+    func adminRequest(_ type: String, fields: [String: Any] = [:]) async throws -> [String: Any] {
+        try await connect()
+        defer { disconnect() }
+        return try await request(type, fields: fields)
+    }
+
     func inspect() async throws -> StevoraAssistantRoute {
         try await connect()
         defer { disconnect() }
