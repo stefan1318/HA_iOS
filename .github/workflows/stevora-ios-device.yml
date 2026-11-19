@@ -17,6 +17,9 @@ on:
     paths:
       - '.github/workflows/stevora-ios-device.yml'
       - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraManagersView.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraViews.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraAssistantGateway.swift'
 
 concurrency:
   group: stevora-ios-device-${{ github.run_id }}
