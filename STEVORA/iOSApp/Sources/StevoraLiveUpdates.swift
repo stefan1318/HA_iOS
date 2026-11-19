@@ -8,7 +8,7 @@ final class StevoraLiveUpdates {
     private var worker: Task<Void, Never>?
     private var generation = 0
 
-    func start(address: String, token: String, allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
+    func start(address: String, token: String, language: String = "bg", allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
                onReady: @escaping @MainActor () -> Void,
                onReconnect: @escaping @MainActor () async -> Void,
                onManifest: @escaping @MainActor (StevoraManifest?) -> Void) {
@@ -20,7 +20,7 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onManifest: onManifest)
+                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onManifest: onManifest)
                     delay = 1
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
@@ -42,7 +42,7 @@ final class StevoraLiveUpdates {
         socket = nil
     }
 
-    private func listen(address: String, token: String, allowLocalHTTP: Bool,
+    private func listen(address: String, token: String, language: String, allowLocalHTTP: Bool,
                         onChange: @escaping @MainActor (HAEntity) -> Void,
                         onReady: @escaping @MainActor () -> Void,
                         onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
@@ -89,7 +89,7 @@ final class StevoraLiveUpdates {
                     subscribed = true
                     onReady()
                     // Optional capability detection on the authenticated Home Assistant socket.
-                    try await send(["id": 2, "type": "stevora/manifest"], on: task)
+                    try await send(["id": 2, "type": "stevora/manifest", "language": language == "en" ? "en" : "bg"], on: task)
                     manifestRequested = true
                 } else if let id = json["id"] as? Int, id == 2, manifestRequested {
                     if json["success"] as? Bool == true,
