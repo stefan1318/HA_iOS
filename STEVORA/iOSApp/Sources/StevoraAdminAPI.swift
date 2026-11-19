@@ -80,13 +80,20 @@ enum StevoraAdminAPI {
         let entityAliases: [String: String]
         let roomOrder: [String]
         let deviceProfiles: [String: DeviceProfile]
+        let translations: LocalizedNames?
         enum CodingKeys: String, CodingKey {
             case revision, rooms, entities, visibility
             case roomAliases = "room_aliases"
             case entityAliases = "entity_aliases"
             case roomOrder = "room_order"
             case deviceProfiles = "device_profiles"
+            case translations
         }
+    }
+
+    struct LocalizedNames: Decodable {
+        let rooms: [String: [String: String]]
+        let entities: [String: [String: String]]
     }
 
     struct DeviceProfile: Codable {
