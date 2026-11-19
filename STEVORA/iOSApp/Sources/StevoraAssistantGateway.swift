@@ -125,13 +125,12 @@ actor StevoraAssistantGateway {
             }
             candidate = match
         } else {
-            // The HA native default is the only fallback; no role-specific routing.
-            let defaults = try await request("assist_pipeline/pipeline/get")
-            guard let defaultID = defaults["preferred_pipeline"] as? String,
-                  let match = pipelines.first(where: { $0["id"] as? String == defaultID }) else {
-                throw StevoraAssistantError.noMatchingPipeline("Home Assistant default")
+            // No STEVORA preference: use HA's preferred pipeline only when
+            // its identity is unambiguous in the live inventory.
+            guard pipelines.count == 1, let only = pipelines.first else {
+                throw StevoraAssistantError.noMatchingPipeline("Select a default assistant in STEVORA Assistant Manager")
             }
-            candidate = match
+            candidate = only
         }
         guard let id = candidate["id"] as? String else {
             throw StevoraAssistantError.invalidResponse
