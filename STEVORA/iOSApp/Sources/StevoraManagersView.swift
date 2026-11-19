@@ -7,6 +7,9 @@ struct StevoraManagersView: View {
     @State private var assistants: StevoraAdminAPI.AssistantSnapshot?
     @State private var selectedDefault = ""
     @State private var userPipelines: [String: String] = [:]
+    @State private var roomAliases: [String: String] = [:]
+    @State private var entityAliases: [String: String] = [:]
+    @State private var roomOrder: [String] = []
     @State private var loading = false
     @State private var errorMessage: String?
     @State private var statusMessage: String?
@@ -26,6 +29,9 @@ struct StevoraManagersView: View {
             let roomData = try JSONSerialization.data(withJSONObject: roomResult)
             let assistantData = try JSONSerialization.data(withJSONObject: assistantResult)
             rooms = try JSONDecoder().decode(StevoraAdminAPI.RoomSnapshot.self, from: roomData)
+            roomAliases = rooms?.roomAliases ?? [:]
+            entityAliases = rooms?.entityAliases ?? [:]
+            roomOrder = rooms?.roomOrder ?? []
             assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: assistantData)
             selectedDefault = assistants?.settings.defaultPipeline ?? ""
             userPipelines = assistants?.settings.userPipelines ?? [:]
@@ -42,6 +48,23 @@ struct StevoraManagersView: View {
                 "expected_revision": rooms.revision,
                 "entities": [["entity_id": entityID, "visibility": visibility]]
             ])
+            await load()
+            await model.refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveRoomLayout() async {
+        guard let rooms else { return }
+        do {
+            _ = try await gateway().adminRequest("stevora/admin/rooms/aliases/update", fields: [
+                "expected_revision": rooms.revision,
+                "room_aliases": roomAliases,
+                "entity_aliases": entityAliases,
+                "room_order": roomOrder
+            ])
+            statusMessage = model.localized("Стаите са запазени", "Room layout saved")
             await load()
             await model.refresh()
         } catch {
@@ -109,6 +132,23 @@ struct StevoraManagersView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(model.localized("Device & Room Manager", "Device & Room Manager"))
                         .font(.headline)
+                    ForEach(rooms.rooms) { room in
+                        HStack {
+                            TextField(room.name, text: Binding(
+                                get: { roomAliases[room.id] ?? room.name },
+                                set: { roomAliases[room.id] = $0 }
+                            ))
+                            Button("↑") {
+                                if !roomOrder.contains(room.id) { roomOrder = rooms.rooms.map(\.id) }
+                                if let index = roomOrder.firstIndex(of: room.id), index > 0 {
+                                    roomOrder.swapAt(index, index - 1)
+                                }
+                            }
+                        }
+                    }
+                    Button(model.localized("Запази стаите", "Save rooms")) {
+                        Task { await saveRoomLayout() }
+                    }
                     Text("\(rooms.entities.count) entities")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(rooms.entities) { entity in
