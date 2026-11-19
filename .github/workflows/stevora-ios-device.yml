@@ -1,0 +1,92 @@
+name: STEVORA iOS device IPA (unsigned)
+
+# IPA builds are deliberate release/test candidates, not every source commit.
+# Updating this workflow triggers a fresh IPA build of the latest branch revision.
+# STEVORA iOS 2.2-2.5 combined preview: native climate, lighting, voice and Assist.
+# Release candidate includes validated pipeline isolation across account switching.
+# Manifest-owned room and entity projection candidate; keep the tested IPA baseline intact.
+# Local-HTTP opt-in policy gate correction requires a fresh device IPA build.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/stevora-ios
+      - feature/stevora-ios-update-from-44199334615
+      - feature/stevora-ios-lan-http-opt-in
+      - feature/stevora-admin-managers-v1
+    paths:
+      - '.github/workflows/stevora-ios-device.yml'
+      - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraManagersView.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraViews.swift'
+      - 'STEVORA/iOSApp/Sources/StevoraAssistantGateway.swift'
+
+concurrency:
+  group: stevora-ios-device-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  device-ipa:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode environment
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Verify STEVORA Ecosystem policy gate
+        run: python3 scripts/check_stevora_ecosystem_ios.py
+      - name: Verify optional STEVORA manifest compatibility
+        run: python3 scripts/check_stevora_ios_manifest.py
+      - name: Generate STEVORA icon
+        run: |
+          swift STEVORA/iOSApp/Branding/generate-icon.swift \
+            STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+      - name: Validate STEVORA brand and storyboard
+        run: |
+          test -s STEVORA/iOSApp/Branding/stevora-logo.png
+          test -s STEVORA/iOSApp/Assets.xcassets/StevoraLogo.imageset/stevora-logo.png
+          sips -g pixelWidth -g pixelHeight STEVORA/iOSApp/Branding/stevora-logo.png
+          python3 -c 'import xml.etree.ElementTree as ET; ET.parse("STEVORA/iOSApp/Branding/LaunchScreen.storyboard")'
+      - name: Generate project
+        run: |
+          cd STEVORA/iOSApp
+          xcodegen generate --spec project.yml
+      - name: Build unsigned iPhone app
+        run: |
+          set -o pipefail
+          xcodebuild -project STEVORA/iOSApp/StevoraCompanion.xcodeproj \
+            -scheme StevoraCompanion -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath /tmp/stevora-device \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee /tmp/stevora-device-build.log
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p /tmp/stevora-payload/Payload
+          cp -R /tmp/stevora-device/Build/Products/Release-iphoneos/StevoraCompanion.app /tmp/stevora-payload/Payload/
+          cd /tmp/stevora-payload
+          /usr/bin/zip -qry /tmp/STEVORA-iOS-unsigned.ipa Payload
+          test -s /tmp/STEVORA-iOS-unsigned.ipa
+      - name: Summarize compiler errors
+        if: failure()
+        run: |
+          if [ -f /tmp/stevora-device-build.log ]; then
+            grep -nE 'error:|warning:|BUILD FAILED|fatal error:' /tmp/stevora-device-build.log | tail -100 || true
+          fi
+      - name: Upload device build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevora-ios-device-build-log
+          path: /tmp/stevora-device-build.log
+          if-no-files-found: ignore
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: STEVORA-iOS-unsigned-IPA
+          path: /tmp/STEVORA-iOS-unsigned.ipa
+          if-no-files-found: error

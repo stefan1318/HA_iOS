@@ -1,0 +1,163 @@
+import Foundation
+import Security
+
+struct HAEntity: Decodable, Identifiable {
+    struct Attributes: Decodable {
+        let friendly_name: String?
+        let device_class: String?
+        let temperature: Double?
+        let current_temperature: Double?
+        let unit_of_measurement: String?
+        let brightness: Int?
+        let rgb_color: [Int]?
+        let hvac_modes: [String]?
+        let fan_modes: [String]?
+        let fan_mode: String?
+        let preset_modes: [String]?
+        let preset_mode: String?
+        let min_temp: Double?
+        let max_temp: Double?
+        let supported_color_modes: [String]?
+        let color_mode: String?
+        let effect_list: [String]?
+        let effect: String?
+    }
+    let entity_id: String
+    let state: String
+    let attributes: Attributes
+    var id: String { entity_id }
+    var domain: String { entity_id.components(separatedBy: ".").first ?? "" }
+    var name: String { attributes.friendly_name ?? entity_id }
+}
+
+enum HAError: LocalizedError {
+    case invalidURL, unauthorized, unexpectedResponse, insecureConnection
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: "Invalid server URL"
+        case .unauthorized: "Authentication failed (401)"
+        case .unexpectedResponse: "Server returned an unexpected response"
+        case .insecureConnection: "Use an HTTPS server URL"
+        }
+    }
+}
+
+enum CredentialStore {
+    private static let service = "com.stevora.companion.ios"
+    static func save(_ value: String, key: String) -> Bool {
+        let data = Data(value.utf8)
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                     kSecAttrService as String: service,
+                                     kSecAttrAccount as String: key]
+        SecItemDelete(query as CFDictionary)
+        var attributes = query
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
+    }
+    static func read(key: String) -> String? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                     kSecAttrService as String: service,
+                                     kSecAttrAccount as String: key,
+                                     kSecReturnData as String: true,
+                                     kSecMatchLimit as String: kSecMatchLimitOne]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+    static func delete(key: String) {
+        SecItemDelete([kSecClass as String: kSecClassGenericPassword,
+                       kSecAttrService as String: service,
+                       kSecAttrAccount as String: key] as CFDictionary)
+    }
+}
+
+/// Plain HTTP is opt-in and limited to literal RFC1918 IPv4 hosts.
+enum StevoraTransportPolicy {
+    static func permits(_ url: URL, allowLocalHTTP: Bool) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host,
+              url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil else { return false }
+        if scheme == "https" { return true }
+        guard scheme == "http", allowLocalHTTP else { return false }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+        var values: [Int] = []
+        for octet in octets {
+            guard !octet.isEmpty, octet.count <= 3,
+                  octet.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  (octet.count == 1 || octet.first != "0"),
+                  let value = Int(octet), (0...255).contains(value) else { return false }
+            values.append(value)
+        }
+        return values[0] == 10 ||
+            (values[0] == 172 && (16...31).contains(values[1])) ||
+            (values[0] == 192 && values[1] == 168)
+    }
+}
+
+struct HAClient {
+    let baseURL: URL
+    let token: String
+
+    init(address: String, token: String, allowLocalHTTP: Bool = false) throws {
+        guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
+              StevoraTransportPolicy.permits(url, allowLocalHTTP: allowLocalHTTP) else { throw HAError.insecureConnection }
+        baseURL = url
+        self.token = token
+    }
+
+    private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+        guard path.hasPrefix("/api/"), !path.hasPrefix("//"),
+              let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
+              url.scheme == baseURL.scheme,
+              url.host == baseURL.host,
+              url.port == baseURL.port else { throw HAError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 20
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw HAError.unexpectedResponse }
+        if http.statusCode == 401 { throw HAError.unauthorized }
+        guard (200...299).contains(http.statusCode) else { throw HAError.unexpectedResponse }
+        return data
+    }
+
+    func conversation(text: String, conversationID: String?) async throws -> (String, String?) {
+        var body: [String: Any] = ["text": text, "language": "bg"]
+        if let conversationID { body["conversation_id"] = conversationID }
+        let encoded = try JSONSerialization.data(withJSONObject: body)
+        let data = try await request("/api/conversation/process", method: "POST", body: encoded)
+        guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let response = result["response"] as? [String: Any],
+              let speech = response["speech"] as? [String: Any],
+              let plain = speech["plain"] as? [String: Any],
+              let answer = plain["speech"] as? String else { throw HAError.unexpectedResponse }
+        return (answer, result["conversation_id"] as? String)
+    }
+
+    func check() async throws {
+        _ = try await request("/api/")
+    }
+
+    func states() async throws -> [HAEntity] {
+        let data = try await request("/api/states")
+        return try JSONDecoder().decode([HAEntity].self, from: data)
+    }
+
+    func service(domain: String, action: String, entityID: String, extra: [String: Any] = [:]) async throws {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_")
+        guard !domain.isEmpty, !action.isEmpty,
+              domain.unicodeScalars.allSatisfy({ allowed.contains($0) }),
+              action.unicodeScalars.allSatisfy({ allowed.contains($0) }),
+              entityID.hasPrefix(domain + ".") else { throw HAError.invalidURL }
+        var payload = extra
+        payload["entity_id"] = entityID
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        _ = try await request("/api/services/\(domain)/\(action)", method: "POST", body: data)
+    }
+}
