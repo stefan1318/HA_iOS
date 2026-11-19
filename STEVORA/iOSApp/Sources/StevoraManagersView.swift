@@ -6,6 +6,7 @@ struct StevoraManagersView: View {
     @State private var rooms: StevoraAdminAPI.RoomSnapshot?
     @State private var assistants: StevoraAdminAPI.AssistantSnapshot?
     @State private var selectedDefault = ""
+    @State private var userPipelines: [String: String] = [:]
     @State private var loading = false
     @State private var errorMessage: String?
     @State private var statusMessage: String?
@@ -27,6 +28,7 @@ struct StevoraManagersView: View {
             rooms = try JSONDecoder().decode(StevoraAdminAPI.RoomSnapshot.self, from: roomData)
             assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: assistantData)
             selectedDefault = assistants?.settings.defaultPipeline ?? ""
+            userPipelines = assistants?.settings.userPipelines ?? [:]
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -53,7 +55,7 @@ struct StevoraManagersView: View {
             _ = try await gateway().adminRequest("stevora/admin/assistants/update", fields: [
                 "expected_revision": assistants.revision,
                 "default_pipeline": selectedDefault.isEmpty ? NSNull() : selectedDefault as Any,
-                "user_pipelines": assistants.settings.userPipelines
+                "user_pipelines": userPipelines
             ])
             statusMessage = model.localized("Асистентът е запазен", "Assistant saved")
             await load()
@@ -81,6 +83,20 @@ struct StevoraManagersView: View {
                         Text(model.localized("Без избор", "No selection")).tag("")
                         ForEach(assistants.pipelines, id: \.id) { pipeline in
                             Text(pipeline.name).tag(pipeline.id)
+                        }
+                    }
+                    ForEach(assistants.users) { user in
+                        Picker(user.name, selection: Binding(
+                            get: { userPipelines[user.id] ?? "" },
+                            set: { next in
+                                if next.isEmpty { userPipelines.removeValue(forKey: user.id) }
+                                else { userPipelines[user.id] = next }
+                            }
+                        )) {
+                            Text(model.localized("Наследи основния", "Use default")).tag("")
+                            ForEach(assistants.pipelines, id: \.id) { pipeline in
+                                Text(pipeline.name).tag(pipeline.id)
+                            }
                         }
                     }
                     Button(model.localized("Запази асистента", "Save assistant")) {
