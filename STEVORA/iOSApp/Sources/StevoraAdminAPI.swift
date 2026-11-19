@@ -76,6 +76,15 @@ enum StevoraAdminAPI {
         let rooms: [Room]
         let entities: [Entity]
         let visibility: [String: String]
+        let roomAliases: [String: String]
+        let entityAliases: [String: String]
+        let roomOrder: [String]
+        enum CodingKeys: String, CodingKey {
+            case revision, rooms, entities, visibility
+            case roomAliases = "room_aliases"
+            case entityAliases = "entity_aliases"
+            case roomOrder = "room_order"
+        }
     }
 
     struct AssistantUser: Decodable, Identifiable {
