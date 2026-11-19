@@ -7,6 +7,12 @@ struct StevoraManifest: Decodable, Equatable {
         let id: String
         let name: String
     }
+    struct Device: Decodable, Equatable {
+        let entityId: String
+        let name: String
+        enum CodingKeys: String, CodingKey { case entityId = "entity_id"; case name }
+    }
+    let entities: [Device]
     let schemaVersion: String
     let installationId: String
     let revision: Int
@@ -16,6 +22,6 @@ struct StevoraManifest: Decodable, Equatable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case installationId = "installation_id"
-        case revision, rooms, mappings
+        case revision, rooms, mappings, entities
     }
 }
