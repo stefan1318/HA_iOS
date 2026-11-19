@@ -79,12 +79,29 @@ enum StevoraAdminAPI {
         let roomAliases: [String: String]
         let entityAliases: [String: String]
         let roomOrder: [String]
+        let deviceProfiles: [String: DeviceProfile]
         enum CodingKeys: String, CodingKey {
             case revision, rooms, entities, visibility
             case roomAliases = "room_aliases"
             case entityAliases = "entity_aliases"
             case roomOrder = "room_order"
+            case deviceProfiles = "device_profiles"
         }
+    }
+
+    struct DeviceProfile: Codable {
+        var name: String
+        var icon: String
+        var layout: String
+        var controls: [String]
+        var areaId: String?
+        var userIds: [String]
+        enum CodingKeys: String, CodingKey {
+            case name, icon, layout, controls
+            case areaId = "area_id"
+            case userIds = "user_ids"
+        }
+        static let empty = DeviceProfile(name: "", icon: "", layout: "compact", controls: [], areaId: nil, userIds: [])
     }
 
     struct AssistantUser: Decodable, Identifiable {
