@@ -78,7 +78,14 @@ enum StevoraAdminAPI {
         let visibility: [String: String]
     }
 
+    struct AssistantUser: Decodable, Identifiable {
+        let id: String
+        let name: String
+    }
+
     struct AssistantSnapshot: Decodable {
+        let users: [AssistantUser]
+
         let revision: Int
         let settings: AssistantSettings
         let pipelines: [AssistantPipeline]
