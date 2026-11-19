@@ -18,7 +18,7 @@ struct StevoraManagersView: View {
     @State private var statusMessage: String?
 
     private func gateway() -> StevoraAssistantGateway {
-        StevoraAssistantGateway(address: model.address, token: model.token)
+        StevoraAssistantGateway(address: model.address, token: model.token, allowLocalHTTP: model.allowLocalHTTP)
     }
 
     private func load() async {
