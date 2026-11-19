@@ -44,7 +44,8 @@ jobs:
         run: python3 scripts/check_stevora_ios_manifest.py
       - name: Generate STEVORA icon
         run: |
-          swift STEVORA/iOSApp/Branding/generate-icon.swift STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          swift STEVORA/iOSApp/Branding/generate-icon.swift \
+            STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - name: Validate STEVORA brand and storyboard
         run: |
           test -s STEVORA/iOSApp/Branding/stevora-logo.png
