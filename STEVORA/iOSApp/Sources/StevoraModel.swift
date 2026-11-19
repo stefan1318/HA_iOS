@@ -101,7 +101,7 @@ final class StevoraModel: ObservableObject {
             connectionMode = "Home Assistant"
             stevoraManifest = nil
             liveConnected = false
-            liveUpdates.start(address: address, token: token, allowLocalHTTP: allowLocalHTTP, onChange: { [weak self] entity in
+            liveUpdates.start(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: { [weak self] entity in
                 guard let self, self.connected else { return }
                 self.liveConnected = true
                 if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
