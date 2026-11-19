@@ -31,12 +31,14 @@ enum StevoraAssistantError: LocalizedError {
 actor StevoraAssistantGateway {
     private let address: String
     private let token: String
+    private let allowLocalHTTP: Bool
     private var socket: URLSessionWebSocketTask?
     private var nextID = 1
 
-    init(address: String, token: String) {
+    init(address: String, token: String, allowLocalHTTP: Bool = false) {
         self.address = address
         self.token = token
+        self.allowLocalHTTP = allowLocalHTTP
     }
 
     private func send(_ object: [String: Any]) async throws {
@@ -61,15 +63,15 @@ actor StevoraAssistantGateway {
     }
 
     private func connect() async throws {
-        guard var parts = URLComponents(string: address),
-              parts.scheme?.lowercased() == "https", parts.host != nil,
-              parts.user == nil, parts.password == nil,
-              parts.query == nil, parts.fragment == nil else {
+        // Match the transport rules used by the main HA connection.
+        // Only explicitly opted-in RFC1918 local IPv4 hosts may use ws://.
+        guard let baseURL = URL(string: address),
+              StevoraTransportPolicy.permits(baseURL, allowLocalHTTP: allowLocalHTTP),
+              var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw StevoraAssistantError.disconnected
         }
-        parts.scheme = "wss"
-        parts.path = parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == ""
-            ? "/api/websocket" : parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).withLeadingSlash + "/api/websocket"
+        parts.scheme = baseURL.scheme?.lowercased() == "http" ? "ws" : "wss"
+        parts.path = (parts.path.hasSuffix("/") ? String(parts.path.dropLast()) : parts.path) + "/api/websocket"
         guard let url = parts.url else { throw StevoraAssistantError.disconnected }
         let task = URLSession.shared.webSocketTask(with: url)
         socket = task
