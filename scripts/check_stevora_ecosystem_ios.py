@@ -22,6 +22,7 @@ checks = {
     "no global ATS bypass": "NSAllowsArbitraryLoads: NO" in project and "NSAllowsLocalNetworking: YES" in project,
     "local HTTP explicit UI consent": "model.allowLocalHTTP" in views and "model.setLocalHTTPAllowed" in views,
     "WebSocket transport policy": "StevoraTransportPolicy.permits" in live and 'parts.scheme = baseURL.scheme?.lowercased() == "http" ? "ws" : "wss"' in live,
+    "Managers and Assist use same LAN transport policy": "StevoraTransportPolicy.permits" in assist and 'parts.scheme = baseURL.scheme?.lowercased() == "http" ? "ws" : "wss"' in assist and "allowLocalHTTP: model.allowLocalHTTP" in read("STEVORA/iOSApp/Sources/StevoraManagersView.swift"),
     "dynamic device discovery": "controllableDomains.contains($0.domain)" in views,
     "no hard-coded developer device IDs": "climate.air_conditioner" not in views and "light.rgb_cct" not in views,
     "no backlight control": 'contains("backlight")' in model and 'contains("backlight")' in views,
