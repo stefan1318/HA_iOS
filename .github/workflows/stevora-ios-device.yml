@@ -13,8 +13,10 @@ on:
       - feature/stevora-ios
       - feature/stevora-ios-update-from-44199334615
       - feature/stevora-ios-lan-http-opt-in
+      - feature/stevora-admin-managers-v1
     paths:
       - '.github/workflows/stevora-ios-device.yml'
+      - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
 
 concurrency:
   group: stevora-ios-device-${{ github.run_id }}
