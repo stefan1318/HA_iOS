@@ -55,6 +55,35 @@ enum StevoraAdminAPI {
         ]
     }
 
+    struct RoomSnapshot: Decodable {
+        struct Room: Decodable, Identifiable {
+            let id: String
+            let name: String
+        }
+        struct Entity: Decodable, Identifiable {
+            let entityId: String
+            let name: String
+            let included: Bool
+            let disabled: Bool
+            let hidden: Bool
+            var id: String { entityId }
+            enum CodingKeys: String, CodingKey {
+                case entityId = "entity_id"
+                case name, included, disabled, hidden
+            }
+        }
+        let revision: Int
+        let rooms: [Room]
+        let entities: [Entity]
+        let visibility: [String: String]
+    }
+
+    struct AssistantSnapshot: Decodable {
+        let revision: Int
+        let settings: AssistantSettings
+        let pipelines: [AssistantPipeline]
+    }
+
     struct VisibilityPatch: Encodable {
         let entityId: String
         let visibility: Visibility
@@ -70,6 +99,16 @@ enum StevoraAdminAPI {
             case visibility
         }
     }
+
+    static func decodeResult<T: Decodable>(_ response: [String: Any], as type: T.Type) throws -> T {
+        guard response["success"] as? Bool == true,
+              let result = response["result"],
+              JSONSerialization.isValidJSONObject(result) else { throw AdminError.unavailable }
+        let data = try JSONSerialization.data(withJSONObject: result)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    enum AdminError: Error { case unavailable }
 
     static func request(id: Int, command: Command) -> [String: Any] {
         ["id": id, "type": command.rawValue]
