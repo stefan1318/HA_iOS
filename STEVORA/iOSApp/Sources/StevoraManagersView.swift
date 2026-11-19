@@ -10,6 +10,7 @@ struct StevoraManagersView: View {
     @State private var roomAliases: [String: String] = [:]
     @State private var entityAliases: [String: String] = [:]
     @State private var roomOrder: [String] = []
+    @State private var deviceProfiles: [String: StevoraAdminAPI.DeviceProfile] = [:]
     @State private var loading = false
     @State private var errorMessage: String?
     @State private var statusMessage: String?
@@ -32,6 +33,7 @@ struct StevoraManagersView: View {
             roomAliases = rooms?.roomAliases ?? [:]
             entityAliases = rooms?.entityAliases ?? [:]
             roomOrder = rooms?.roomOrder ?? []
+            deviceProfiles = rooms?.deviceProfiles ?? [:]
             assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: assistantData)
             selectedDefault = assistants?.settings.defaultPipeline ?? ""
             userPipelines = assistants?.settings.userPipelines ?? [:]
@@ -65,6 +67,23 @@ struct StevoraManagersView: View {
                 "room_order": roomOrder
             ])
             statusMessage = model.localized("Стаите са запазени", "Room layout saved")
+            await load()
+            await model.refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveDevice(_ entityID: String) async {
+        guard let rooms, let profile = deviceProfiles[entityID] else { return }
+        do {
+            let encoded = try JSONEncoder().encode(profile)
+            let value = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
+            _ = try await gateway().adminRequest("stevora/admin/devices/update", fields: [
+                "expected_revision": rooms.revision,
+                "profiles": [entityID: value]
+            ])
+            statusMessage = model.localized("Устройството е запазено", "Device saved")
             await load()
             await model.refresh()
         } catch {
@@ -174,6 +193,42 @@ struct StevoraManagersView: View {
                                 } label: {
                                     Image(systemName: entity.included ? "eye" : "eye.slash")
                                 }
+                            }
+                        }
+                        DisclosureGroup(model.localized("Персонализиране", "Customize")) {
+                            TextField(model.localized("Име", "Name"), text: Binding(
+                                get: { deviceProfiles[entity.entityId]?.name ?? "" },
+                                set: { deviceProfiles[entity.entityId, default: .empty].name = $0 }
+                            ))
+                            TextField("mdi:icon", text: Binding(
+                                get: { deviceProfiles[entity.entityId]?.icon ?? "" },
+                                set: { deviceProfiles[entity.entityId, default: .empty].icon = $0 }
+                            ))
+                            Picker(model.localized("Изглед", "Layout"), selection: Binding(
+                                get: { deviceProfiles[entity.entityId]?.layout ?? "compact" },
+                                set: { deviceProfiles[entity.entityId, default: .empty].layout = $0 }
+                            )) {
+                                Text("Info").tag("info")
+                                Text("Compact").tag("compact")
+                                Text("Expanded").tag("expanded")
+                            }
+                            Picker(model.localized("Стая", "Room"), selection: Binding(
+                                get: { deviceProfiles[entity.entityId]?.areaId ?? "" },
+                                set: { deviceProfiles[entity.entityId, default: .empty].areaId = $0.isEmpty ? nil : $0 }
+                            )) {
+                                Text(model.localized("Автоматично", "Automatic")).tag("")
+                                ForEach(rooms.rooms) { room in Text(room.name).tag(room.id) }
+                            }
+                            TextField(model.localized("Контроли (разделени със запетая)", "Controls (comma-separated)"), text: Binding(
+                                get: { (deviceProfiles[entity.entityId]?.controls ?? []).joined(separator: ",") },
+                                set: { deviceProfiles[entity.entityId, default: .empty].controls = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+                            ))
+                            TextField(model.localized("Потребителски ID (със запетая)", "User IDs (comma-separated)"), text: Binding(
+                                get: { (deviceProfiles[entity.entityId]?.userIds ?? []).joined(separator: ",") },
+                                set: { deviceProfiles[entity.entityId, default: .empty].userIds = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+                            ))
+                            Button(model.localized("Запази устройството", "Save device")) {
+                                Task { await saveDevice(entity.entityId) }
                             }
                         }
                     }
