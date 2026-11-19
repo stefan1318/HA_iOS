@@ -463,6 +463,7 @@ private struct StevoraDashboard: View {
                     .padding(.vertical, 6)
                 }
             }.padding(19).modifier(StevoraGlassCard())
+            StevoraManagersView(model: model)
             VStack(alignment: .leading, spacing: 15) {
                 Text(model.localized("Език", "Language")).font(.headline)
                 Picker("Language", selection: Binding(
