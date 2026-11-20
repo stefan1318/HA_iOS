@@ -15,6 +15,11 @@ assist = read("STEVORA/iOSApp/Sources/StevoraAssistantGateway.swift")
 project = read("STEVORA/iOSApp/project.yml")
 checks = {
     "iOS ecosystem contract": "[STE-03]" in contract and "[STE-00]" in contract and "[STE-06]" in contract,
+    "Ecosystem is OS plus native Android and iOS": "STEVORA Ecosystem = STEVORA OS + STEVORA App for Android + STEVORA App for iOS" in contract,
+    "iOS is an OS native client": "native client of STEVORA OS" in contract and "single source of truth" in contract,
+    "OS integrated components defined": all(x in contract for x in ("Stevora Core", "Stevora Universal Integration", "Stevora Home Panel 7.1.1", "Stevora Home Hub", "Stevora Frontend", "Stevora People & Presence", "Stevora Manifest")),
+    "Hey Stevora OS provider and package rules": all(x in contract for x in ("Hey Stevora is a built-in", "installed", "purchased package")),
+    "Memory private owner only excluded from iOS": all(x in contract for x in ("owner\'s homes only", "not bundled", "disabled by default")),
     "upstream AI policy retained": (root / "AI_POLICY.md").exists(),
     "existing iOS bundle identifier": "com.stevora.companion.ios" in project,
     "keychain credentials": "CredentialStore" in model and "kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly" in network,
