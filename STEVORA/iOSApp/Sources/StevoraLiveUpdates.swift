@@ -89,7 +89,7 @@ final class StevoraLiveUpdates {
                     subscribed = true
                     onReady()
                     // Optional capability detection on the authenticated Home Assistant socket.
-                    try await send(["id": 2, "type": "stevora/manifest", "language": language == "en" ? "en" : "bg"], on: task)
+                    try await send(["id": 2, "type": "stevora/os/v1/manifest", "language": language == "en" ? "en" : "bg"], on: task)
                     manifestRequested = true
                 } else if let id = json["id"] as? Int, id == 2, manifestRequested {
                     if json["success"] as? Bool == true,

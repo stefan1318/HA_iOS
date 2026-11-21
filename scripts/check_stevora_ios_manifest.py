@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static regression guard for native STEVORA optional manifest discovery."""
+"""Static regression guard for native STEVORA versioned manifest discovery."""
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 sources = root / "STEVORA/iOSApp/Sources"
@@ -8,14 +8,14 @@ live = (sources / "StevoraLiveUpdates.swift").read_text()
 manifest = (sources / "StevoraManifest.swift").read_text()
 views = (sources / "StevoraViews.swift").read_text()
 checks = {
-    "optional discovery after authenticated subscription": 'subscribed = true' in live and 'type": "stevora/manifest"' in live,
-    "native HA fallback on unsupported result": "onManifest(nil)" in live and 'connectionMode = "Home Assistant"' in model,
+    "OS v1 discovery after authenticated subscription": 'subscribed = true' in live and 'type": "stevora/os/v1/manifest"' in live,
+    "unsupported manifest disables controls": "onManifest(nil)" in live and 'connected && liveConnected && stevoraManifest != nil' in model,
     "manifest schema and installation validation": 'manifest.schemaVersion == "1.0"' in model and "!manifest.installationId.isEmpty" in model,
     "manifest revision monotonicity": "previous.revision > manifest.revision" in model,
     "no hardcoded Home Hub installation": 'installation_id' in manifest and 'stevoraManifest' in model,
     "manifest-owned room projection": "projectedRooms" in model and "projectedEntities(in roomID:" in model,
     "manifest-owned device visibility": "model.projectedEntities.filter" in views and "model.projectedRooms.map" in views,
-    "no silent HA expansion after manifest": "guard let manifest = stevoraManifest else { return entities }" in model and "allowed.contains($0.id)" in model,
+    "no silent HA expansion after manifest": "guard let manifest = stevoraManifest else { return [] }" in model and "allowed.contains($0.id)" in model,
     "offline safety intact": model.count("connected && liveConnected") >= 8,
     "backlight policy intact": 'contains("backlight")' in model and 'contains("backlight")' in views,
 }

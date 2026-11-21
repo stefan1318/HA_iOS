@@ -11,10 +11,12 @@ on:
   push:
     branches:
       - feature/stevora-ios
+      - feature/stevora-os-dev2-ios-client
       - feature/stevora-ios-update-from-44199334615
       - feature/stevora-ios-lan-http-opt-in
       - feature/stevora-admin-managers-v1
     paths:
+      - 'STEVORA/iOSApp/Sources/StevoraLiveUpdates.swift'
       - '.github/workflows/stevora-ios-device.yml'
       - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
       - 'STEVORA/iOSApp/Sources/StevoraManagersView.swift'
