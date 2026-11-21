@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import CryptoKit
+import AuthenticationServices
 
 @MainActor
 final class StevoraModel: ObservableObject {
@@ -48,11 +49,14 @@ final class StevoraModel: ObservableObject {
             if let refresh = tokens.refresh_token {
                 guard CredentialStore.save(refresh, key: "refresh_token") else { throw HAError.unexpectedResponse }
             }
+            UserDefaults.standard.set(StevoraOAuth.clientID, forKey: "stevora.oauth.clientID")
             token = tokens.access_token
             isOAuthSession = true
             UserDefaults.standard.set(address, forKey: "stevora.address")
         } catch {
-            self.error = error.localizedDescription
+            if (error as? ASWebAuthenticationSessionError)?.code != .canceledLogin {
+                self.error = error.localizedDescription
+            }
             return
         }
         busy = false
@@ -80,7 +84,9 @@ final class StevoraModel: ObservableObject {
                 try await api.check()
             } catch HAError.unauthorized {
                 guard let refresh = CredentialStore.read(key: "refresh_token") else { throw HAError.unauthorized }
-                let renewed = try await StevoraTokenAPI.refresh(server: api.baseURL, token: refresh)
+                // Previously issued refresh tokens remain bound to the original client ID.
+                let clientID = UserDefaults.standard.string(forKey: "stevora.oauth.clientID") ?? "https://stevora.com"
+                let renewed = try await StevoraTokenAPI.refresh(server: api.baseURL, token: refresh, clientID: clientID)
                 guard CredentialStore.save(renewed.access_token, key: "access_token") else { throw HAError.unexpectedResponse }
                 if let next = renewed.refresh_token {
                     guard CredentialStore.save(next, key: "refresh_token") else { throw HAError.unexpectedResponse }
@@ -277,6 +283,7 @@ final class StevoraModel: ObservableObject {
         liveUpdates.stop()
         CredentialStore.delete(key: "access_token")
         CredentialStore.delete(key: "refresh_token")
+        UserDefaults.standard.removeObject(forKey: "stevora.oauth.clientID")
         isOAuthSession = false
         token = ""
         connected = false

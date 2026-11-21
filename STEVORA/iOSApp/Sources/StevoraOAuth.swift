@@ -7,6 +7,8 @@ import Security
 /// Home Assistant authorization-code flow with PKCE. No user password enters STEVORA.
 @MainActor
 final class StevoraOAuth: NSObject, ASWebAuthenticationPresentationContextProviding {
+    nonisolated static let clientID = "https://raw.githubusercontent.com/stefan1318/HA_iOS/e1081cb7f86006eb1d11b8bca336c7247e245b0b/STEVORA/oauth/ios-client.html"
+    nonisolated static let redirectURI = "com.stevora://auth/callback"
     private var session: ASWebAuthenticationSession?
 
     func authorizationCode(server: URL) async throws -> (code: String, verifier: String) {
@@ -17,13 +19,14 @@ final class StevoraOAuth: NSObject, ASWebAuthenticationPresentationContextProvid
             .replacingOccurrences(of: "=", with: "")
         var components = URLComponents(url: server.appendingPathComponent("auth/authorize"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "client_id", value: "https://stevora.com"),
-            URLQueryItem(name: "redirect_uri", value: "com.stevora://auth/callback"),
+            URLQueryItem(name: "client_id", value: Self.clientID),
+            URLQueryItem(name: "redirect_uri", value: Self.redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256")
         ]
         guard let url = components.url else { throw HAError.invalidURL }
+        defer { session = nil }
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
             let auth = ASWebAuthenticationSession(url: url, callbackURLScheme: "com.stevora") { url, error in
                 if let url { continuation.resume(returning: url) }
@@ -37,7 +40,6 @@ final class StevoraOAuth: NSObject, ASWebAuthenticationPresentationContextProvid
                 continuation.resume(throwing: HAError.unexpectedResponse)
             }
         }
-        session = nil
         guard callback.scheme == "com.stevora", callback.host == "auth",
               callback.path == "/callback",
               let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
@@ -72,16 +74,16 @@ enum StevoraTokenAPI {
     static func exchange(server: URL, code: String, verifier: String) async throws -> StevoraTokens {
         try await request(server: server, fields: [
             "grant_type": "authorization_code", "code": code,
-            "client_id": "https://stevora.com",
+            "client_id": StevoraOAuth.clientID,
             "code_verifier": verifier,
-            "redirect_uri": "com.stevora://auth/callback"
+            "redirect_uri": StevoraOAuth.redirectURI
         ])
     }
 
-    static func refresh(server: URL, token: String) async throws -> StevoraTokens {
+    static func refresh(server: URL, token: String, clientID: String) async throws -> StevoraTokens {
         try await request(server: server, fields: [
             "grant_type": "refresh_token", "refresh_token": token,
-            "client_id": "https://stevora.com"
+            "client_id": clientID
         ])
     }
 

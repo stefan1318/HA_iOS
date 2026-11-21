@@ -16,6 +16,7 @@ on:
       - feature/stevora-ios-lan-http-opt-in
       - feature/stevora-admin-managers-v1
     paths:
+      - 'STEVORA/iOSApp/Sources/StevoraOAuth.swift'
       - 'STEVORA/iOSApp/Sources/StevoraLiveUpdates.swift'
       - '.github/workflows/stevora-ios-device.yml'
       - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
@@ -36,6 +37,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Verify published iOS OAuth callback registration
+        run: |
+          client_id=$(sed -n 's/.*static let clientID = "\(.*\)"/\1/p' STEVORA/iOSApp/Sources/StevoraOAuth.swift)
+          curl --fail --silent --show-error --retry 3 --max-time 20 "$client_id" -o "$RUNNER_TEMP/ios-client.html"
+          cmp "$RUNNER_TEMP/ios-client.html" STEVORA/oauth/ios-client.html
+          grep -F '<link rel="redirect_uri" href="com.stevora://auth/callback">' "$RUNNER_TEMP/ios-client.html"
       - name: Xcode environment
         run: xcodebuild -version
       - name: Install XcodeGen
