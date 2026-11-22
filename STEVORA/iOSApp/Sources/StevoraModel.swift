@@ -141,9 +141,7 @@ final class StevoraModel: ObservableObject {
             connectionMode = localized("Липсва съвместим STEVORA OS манифест", "Compatible STEVORA OS manifest unavailable")
             return
         }
-        if let previous = stevoraManifest,
-           previous.installationId == manifest.installationId,
-           previous.revision > manifest.revision { return }
+        // Revisions are CRC fingerprints. Socket requests are serialized in arrival order.
         stevoraManifest = manifest
         connectionMode = "STEVORA Ecosystem"
     }

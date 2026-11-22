@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - feature/stevora-ios
+      - feature/stevora-os-dev4-ios-sync
       - feature/stevora-os-dev2-ios-client
       - feature/stevora-ios-update-from-44199334615
       - feature/stevora-ios-lan-http-opt-in

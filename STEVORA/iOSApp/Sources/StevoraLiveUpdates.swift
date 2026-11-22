@@ -62,7 +62,19 @@ final class StevoraLiveUpdates {
 
         var authenticated = false
         var subscribed = false
-        var manifestRequested = false
+        var requestID = 2
+        var fetchingManifest = false
+        var manifestDirty = false
+        func requestManifest() async throws {
+            if fetchingManifest {
+                manifestDirty = true
+                return
+            }
+            fetchingManifest = true
+            manifestDirty = false
+            requestID += 1
+            try await send(["id": requestID, "type": "stevora/os/v1/manifest", "language": language == "en" ? "en" : "bg"], on: task)
+        }
         while !Task.isCancelled {
             let message = try await task.receive()
             let data: Data
@@ -73,6 +85,7 @@ final class StevoraLiveUpdates {
             }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let type = json["type"] as? String else { continue }
+            guard !Task.isCancelled, socket === task else { return }
             switch type {
             case "auth_required":
                 try await send(["type": "auth", "access_token": token], on: task)
@@ -88,10 +101,12 @@ final class StevoraLiveUpdates {
                     }
                     subscribed = true
                     onReady()
-                    // Optional capability detection on the authenticated Home Assistant socket.
-                    try await send(["id": 2, "type": "stevora/os/v1/manifest", "language": language == "en" ? "en" : "bg"], on: task)
-                    manifestRequested = true
-                } else if let id = json["id"] as? Int, id == 2, manifestRequested {
+                    try await send(["id": 2, "type": "stevora/os/v1/manifest/subscribe"], on: task)
+                } else if let id = json["id"] as? Int, id == 2 {
+                    // Older OS releases still support the initial snapshot.
+                    try await requestManifest()
+                } else if let id = json["id"] as? Int, id == requestID, fetchingManifest {
+                    fetchingManifest = false
                     if json["success"] as? Bool == true,
                        let payload = json["result"], JSONSerialization.isValidJSONObject(payload),
                        let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -100,8 +115,13 @@ final class StevoraLiveUpdates {
                     } else {
                         onManifest(nil)
                     }
+                    if manifestDirty { try await requestManifest() }
                 }
             case "event":
+                if json["id"] as? Int == 2 {
+                    try await requestManifest()
+                    continue
+                }
                 guard subscribed,
                       let event = json["event"] as? [String: Any],
                       let payload = event["data"] as? [String: Any],
