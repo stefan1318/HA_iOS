@@ -17,13 +17,10 @@ on:
       - feature/stevora-ios-lan-http-opt-in
       - feature/stevora-admin-managers-v1
     paths:
-      - 'STEVORA/iOSApp/Sources/StevoraOAuth.swift'
-      - 'STEVORA/iOSApp/Sources/StevoraLiveUpdates.swift'
+      - 'STEVORA/iOSApp/**'
+      - 'STEVORA/ContractTests/**'
+      - 'scripts/check_stevora_*'
       - '.github/workflows/stevora-ios-device.yml'
-      - 'STEVORA/iOSApp/Sources/StevoraAdminAPI.swift'
-      - 'STEVORA/iOSApp/Sources/StevoraManagersView.swift'
-      - 'STEVORA/iOSApp/Sources/StevoraViews.swift'
-      - 'STEVORA/iOSApp/Sources/StevoraAssistantGateway.swift'
 
 concurrency:
   group: stevora-ios-device-${{ github.run_id }}
@@ -73,7 +70,24 @@ jobs:
             -scheme StevoraCompanion -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath /tmp/stevora-device \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee /tmp/stevora-device-build.log
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee /tmp/stevora-device-build.log
+      - name: Check built application metadata
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import plistlib
+          app = Path("/tmp/stevora-device/Build/Products/Release-iphoneos/StevoraCompanion.app")
+          info = plistlib.loads((app / "Info.plist").read_bytes())
+          assert info["CFBundleIdentifier"] == "com.stevora.companion.ios"
+          assert info["CFBundleVersion"].isdigit() and info["CFBundleShortVersionString"]
+          ats = info["NSAppTransportSecurity"]
+          assert ats.get("NSAllowsArbitraryLoads", False) is False and ats["NSAllowsLocalNetworking"] is True
+          assert "location" in info["UIBackgroundModes"]
+          assert info["NSLocationWhenInUseUsageDescription"] and info["NSLocationAlwaysAndWhenInUseUsageDescription"]
+          for language in ("bg", "en"):
+              assert (app / f"{language}.lproj/InfoPlist.strings").is_file()
+          print("PASS: packaged app identity, version, LAN policy, location and BG/EN permission prompts")
+          PYTHON
       - name: Package unsigned IPA
         run: |
           mkdir -p /tmp/stevora-payload/Payload

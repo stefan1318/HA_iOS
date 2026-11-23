@@ -154,6 +154,8 @@ final class StevoraModel: ObservableObject {
             } else {
                 self.entities.append(entity)
             }
+        }, onRemove: { [weak self] id in
+            self?.entities.removeAll { $0.id == id }
         }, onReady: { [weak self] in
             self?.liveConnected = true
             Task { await self?.refresh() }

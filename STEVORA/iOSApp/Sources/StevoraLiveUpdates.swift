@@ -9,6 +9,7 @@ final class StevoraLiveUpdates {
     private var generation = 0
 
     func start(address: String, token: String, language: String = "bg", allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
+               onRemove: @escaping @MainActor (String) -> Void,
                onReady: @escaping @MainActor () -> Void,
                onUser: @escaping @MainActor ([String: Any]) -> Void,
                onLanguage: @escaping @MainActor (String) -> Void,
@@ -23,7 +24,7 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onUser: onUser, onLanguage: onLanguage, onManifest: onManifest)
+                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onRemove: onRemove, onReady: onReady, onUser: onUser, onLanguage: onLanguage, onManifest: onManifest)
                     delay = 1
                 } catch HAError.unauthorized {
                     guard !Task.isCancelled, current == self.generation else { return }
@@ -51,7 +52,8 @@ final class StevoraLiveUpdates {
 
     private func listen(address: String, token: String, language: String, allowLocalHTTP: Bool,
                         onChange: @escaping @MainActor (HAEntity) -> Void,
-                        onReady: @escaping @MainActor () -> Void,
+                        onRemove: @escaping @MainActor (String) -> Void,
+               onReady: @escaping @MainActor () -> Void,
                onUser: @escaping @MainActor ([String: Any]) -> Void,
                onLanguage: @escaping @MainActor (String) -> Void,
                         onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
@@ -145,8 +147,11 @@ final class StevoraLiveUpdates {
                 }
                 guard subscribed,
                       let event = json["event"] as? [String: Any],
-                      let payload = event["data"] as? [String: Any],
-                      let newState = payload["new_state"] as? [String: Any] else { continue }
+                      let payload = event["data"] as? [String: Any] else { continue }
+                guard let newState = payload["new_state"] as? [String: Any] else {
+                    if payload["new_state"] is NSNull, let id = payload["entity_id"] as? String { onRemove(id) }
+                    continue
+                }
                 let stateData = try JSONSerialization.data(withJSONObject: newState)
                 if let entity = try? JSONDecoder().decode(HAEntity.self, from: stateData) {
                     onChange(entity)

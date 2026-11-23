@@ -180,7 +180,17 @@ struct HAClient {
 
     func states() async throws -> [HAEntity] {
         let data = try await request("/api/states")
-        return try JSONDecoder().decode([HAEntity].self, from: data)
+        // Third-party integrations can publish vendor attributes of arbitrary types.
+        // Skip an incompatible record without losing every other room and device.
+        return try JSONDecoder().decode([StateRecord].self, from: data).compactMap(\.entity)
+    }
+
+    private struct StateRecord: Decodable {
+        let entity: HAEntity?
+
+        init(from decoder: Decoder) {
+            entity = try? HAEntity(from: decoder)
+        }
     }
 
     func service(domain: String, action: String, entityID: String, extra: [String: Any] = [:]) async throws {

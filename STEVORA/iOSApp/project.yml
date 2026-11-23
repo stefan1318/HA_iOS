@@ -24,14 +24,19 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "STEVORA uses your microphone for voice commands."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "STEVORA converts spoken commands to text."
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: NO
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        MARKETING_VERSION: "2.5.1"
+        CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
     info:
       path: Generated/StevoraInfo.plist
       properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: NO
+          NSAllowsLocalNetworking: YES
         NSLocationWhenInUseUsageDescription: "Share this device’s location with the STEVORA home you select."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Update presence in your selected home when the app is in the background."
         NSLocalNetworkUsageDescription: "Connect to your STEVORA OS home on the local network."
