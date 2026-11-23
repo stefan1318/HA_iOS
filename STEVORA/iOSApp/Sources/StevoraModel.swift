@@ -160,11 +160,7 @@ final class StevoraModel: ObservableObject {
             self?.liveConnected = true
             Task { await self?.refresh() }
         }, onUser: { [weak self] user in
-            guard let self, self.connected else { return }
-            self.userID = user["id"] as? String
-            self.accountName = user["name"] as? String
-            self.isAdmin = user["is_admin"] as? Bool == true || user["is_owner"] as? Bool == true
-            self.bindPresence()
+            self?.receiveUser(user)
         }, onLanguage: { [weak self] language in
             self?.language = language
         }, onReconnect: { [weak self] in
@@ -181,6 +177,14 @@ final class StevoraModel: ObservableObject {
         }, onManifest: { [weak self] manifest in
             self?.receiveManifest(manifest)
         })
+    }
+
+    func receiveUser(_ user: [String: Any]) {
+        guard connected else { return }
+        userID = user["id"] as? String
+        accountName = user["name"] as? String
+        isAdmin = user["is_admin"] as? Bool == true || user["is_owner"] as? Bool == true
+        bindPresence()
     }
 
     private func bindPresence() {

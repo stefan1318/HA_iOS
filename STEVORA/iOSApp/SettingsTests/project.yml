@@ -1,0 +1,39 @@
+name: StevoraSettingsTests
+options:
+  bundleIdPrefix: com.stevora.tests
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: "16.4"
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  SettingsFixture:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../Sources
+        excludes: [StevoraApp.swift]
+      - path: ../Assets.xcassets
+      - path: Fixture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stevora.tests.settings
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+  SettingsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: SettingsFixture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stevora.tests.settings.ui
+        TEST_TARGET_NAME: SettingsFixture
+schemes:
+  SettingsFixture:
+    build:
+      targets:
+        SettingsFixture: all
+        SettingsUITests: [test]
+    test:
+      targets: [SettingsUITests]

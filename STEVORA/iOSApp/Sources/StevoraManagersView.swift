@@ -118,13 +118,16 @@ struct StevoraManagersView: View {
         saving = true
         defer { saving = false }
         do {
-            _ = try await gateway().adminRequest("stevora/admin/rooms/aliases/update", fields: [
+            var fields: [String: Any] = [
                 "expected_revision": rooms.revision,
                 "room_aliases": rooms.roomAliases.merging(roomAliases.filter { $0.key == id }) { _, new in new },
                 "entity_aliases": entityAliases,
-                "room_order": roomOrder,
                 "room_labels": [id: ["bg": bilingualRooms[id]?["bg"] ?? "", "en": bilingualRooms[id]?["en"] ?? ""]]
-            ])
+            ]
+            let ids = rooms.rooms.map(\.id)
+            let saved = rooms.roomOrder.filter { ids.contains($0) }
+            if roomOrder != saved + ids.filter({ !saved.contains($0) }) { fields["room_order"] = roomOrder }
+            _ = try await gateway().adminRequest("stevora/admin/rooms/aliases/update", fields: fields)
             statusMessage = model.localized("Стаите са запазени", "Room layout saved")
             await load()
             await model.refresh()
@@ -257,6 +260,21 @@ struct StevoraManagersView: View {
         }
     }
 
+    private var displayCategories: [StevoraSettingsPicker.Choice] {
+        [
+            .init(id: "auto", name: model.localized("Автоматично", "Automatic")),
+            .init(id: "lighting", name: model.localized("Осветление", "Lighting")),
+            .init(id: "switches", name: model.localized("Ключове", "Switches")),
+            .init(id: "climate", name: model.localized("Климат", "Climate")),
+            .init(id: "fans", name: model.localized("Вентилатори", "Fans")),
+            .init(id: "covers", name: model.localized("Щори", "Covers")),
+            .init(id: "media", name: model.localized("Медия", "Media")),
+            .init(id: "sensors", name: model.localized("Датчици", "Sensors")),
+            .init(id: "binary_sensors", name: model.localized("Двоични датчици", "Binary sensors")),
+            .init(id: "locks", name: model.localized("Брави", "Locks"))
+        ]
+    }
+
     @ViewBuilder private func deviceEditor(_ snapshot: StevoraAdminAPI.RoomSnapshot) -> some View {
         StevoraSettingsPicker(title: model.localized("Устройство", "Device"), choices: deviceChoices(snapshot), selection: $selectedEntity)
         if let entity = snapshot.entities.first(where: { $0.id == selectedEntity }) {
@@ -287,6 +305,12 @@ struct StevoraManagersView: View {
                     Text(model.localized("Информация", "Information")).tag("info")
                     Text(model.localized("Компактен", "Compact")).tag("compact")
                     Text(model.localized("Разширен", "Expanded")).tag("expanded")
+                }
+                Picker(model.localized("Категория", "Display category"), selection: Binding(
+                    get: { deviceProfiles[entity.id]?.displayCategory ?? "auto" },
+                    set: { deviceProfiles[entity.id, default: .empty].displayCategory = $0 }
+                )) {
+                    ForEach(displayCategories, id: \.id) { category in Text(category.name).tag(category.id) }
                 }
                 StevoraSettingsPicker(title: model.localized("Стая", "Room"),
                     choices: [.init(id: "", name: model.localized("Автоматично", "Automatic"))] +

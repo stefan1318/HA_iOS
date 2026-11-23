@@ -39,6 +39,7 @@ struct StevoraSettingsHome: View {
                     ScrollView { StevoraPresenceSettings(presence: model.presence).padding() }
                         .navigationTitle(privacy)
                 } label: { Label(privacy, systemImage: "location.circle") }
+                .accessibilityIdentifier("settings.location")
                 NavigationLink {
                     Form {
                         LabeledContent(model.localized("Състояние", "Status"), value: model.connectionMode)
@@ -60,8 +61,10 @@ struct StevoraSettingsHome: View {
                         if available.isEmpty {
                             Text(model.localized("Няма достъпни сцени или автоматизации", "No scenes or automations available"))
                         } else {
+                            let names = Dictionary((model.stevoraManifest?.entities ?? []).map { ($0.entityId, $0.name) },
+                                                   uniquingKeysWith: { first, _ in first })
                             StevoraSettingsPicker(title: model.localized("Сцена или автоматизация", "Scene or automation"),
-                                choices: available.map { .init(id: $0.id, name: model.displayName($0), detail: $0.id) },
+                                choices: available.map { .init(id: $0.id, name: names[$0.id] ?? $0.name, detail: $0.id) },
                                 selection: $routineID)
                             if let entity = available.first(where: { $0.id == routineID }) {
                                 Button { Task { await model.runRoutine(entity) } } label: {
@@ -72,6 +75,7 @@ struct StevoraSettingsHome: View {
                         }
                     }.navigationTitle(routines)
                 } label: { Label(routines, systemImage: "play.square.stack") }
+                .accessibilityIdentifier("settings.routines")
             } header: { Text(model.accountName ?? model.localized("Лични настройки", "Personal settings")) }
             if model.canManageHome {
                 Section(model.localized("Управление на дома", "Manage home")) {
@@ -79,6 +83,7 @@ struct StevoraSettingsHome: View {
                         NavigationLink {
                             StevoraManagersView(model: model, page: page)
                         } label: { Label(page.title(model), systemImage: page.icon) }
+                        .accessibilityIdentifier("settings.manager.\(page)")
                     }
                 }
             }

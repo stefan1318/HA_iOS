@@ -114,3 +114,19 @@ jobs:
           name: STEVORA-iOS-unsigned-IPA
           path: /tmp/STEVORA-iOS-unsigned.ipa
           if-no-files-found: error
+      - name: Exercise settings navigation on iPhone Simulator
+        working-directory: STEVORA/iOSApp/SettingsTests
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime,items in reversed(list(devices.items())) if "iOS" in runtime for d in items if d["name"].startswith("iPhone")))')
+          xcodebuild -scheme SettingsFixture -project StevoraSettingsTests.xcodeproj \
+            -destination "id=$device" -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/settings-ui.xcresult" test
+      - name: Upload settings screenshots and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: STEVORA-settings-simulator-results
+          path: ${{ runner.temp }}/settings-ui.xcresult
+          if-no-files-found: ignore

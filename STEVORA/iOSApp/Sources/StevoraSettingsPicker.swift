@@ -34,6 +34,7 @@ struct StevoraSettingsPicker: View {
                     .foregroundStyle(Brand.cyan)
             } label: { Text(title) }
         }
+        .accessibilityIdentifier("settings.catalog.\(title)")
         .sheet(isPresented: $isSearching) {
             NavigationStack {
                 List {
@@ -64,6 +65,7 @@ struct StevoraSettingsPicker: View {
                             }
                             .contentShape(Rectangle())
                         }
+                        .accessibilityIdentifier("settings.choice.\(item.id)")
                     }
                 }
                 .navigationTitle(title)
