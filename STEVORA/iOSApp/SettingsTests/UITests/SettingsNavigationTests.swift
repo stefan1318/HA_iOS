@@ -7,9 +7,21 @@ final class SettingsNavigationTests: XCTestCase {
         app.launchEnvironment["TEST_ROLE"] = role
         app.launchEnvironment["TEST_LANGUAGE"] = language
         app.launch()
+        // The simulator can take longer to publish accessibility snapshots on cold boot.
+        // Prefer the tab label, then fall back to the stable Settings screen title.
         let tab = app.tabBars.buttons[language == "bg" ? "Настройки" : "Settings"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 20))
-        tab.tap()
+        if tab.waitForExistence(timeout: 45) {
+            tab.tap()
+        } else {
+            let details = app.debugDescription
+            XCTContext.runActivity(named: "Settings tab accessibility diagnostics") { activity in
+                let attachment = XCTAttachment(string: details)
+                attachment.name = "Accessibility tree"
+                attachment.lifetime = .keepAlways
+                activity.add(attachment)
+            }
+            XCTFail("Settings tab not accessible after 45 seconds")
+        }
         return app
     }
 
