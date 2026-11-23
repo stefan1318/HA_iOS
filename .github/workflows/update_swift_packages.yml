@@ -6,11 +6,6 @@ on:
         description: Only update this package (its name in project.pbxproj); blank for every outdated one
         required: false
         type: string
-  schedule:
-    # Weekly. Checks every Swift package the Xcode project depends on and opens
-    # one pull request per package that has a newer release. Renovate covers the
-    # gems and GitHub Actions; it has no manager for project.pbxproj or Package.resolved.
-    - cron: '0 8 * * 1'
 
 permissions:
   contents: read
