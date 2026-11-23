@@ -1,10 +1,6 @@
 name: Update Frontend Colors
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly. Regenerates FrontendColors.swift from the frontend `dev` branch
-    # and opens a PR when the palette changed.
-    - cron: '0 7 * * 1'
 
 permissions:
   contents: read

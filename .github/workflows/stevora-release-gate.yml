@@ -1,0 +1,29 @@
+name: STEVORA iOS Release Gate
+
+'on':
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: STEVORA source branch to validate
+        required: true
+        default: feature/stevora-ios
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/stevora-release-gate.yml'
+      - 'Tools/stevora_release_gate.py'
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: STEVORA release policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_ref || github.head_ref || github.ref }}
+          persist-credentials: false
+      - name: Verify STEVORA release identity and localization
+        run: python3 Tools/stevora_release_gate.py --report "$GITHUB_STEP_SUMMARY"
