@@ -18,6 +18,13 @@ struct StevoraManifest: Decodable, Equatable {
             case name, layout, controls
         }
     }
+    func permits(_ action: String, entityID: String) -> Bool {
+        guard controllable?.contains(entityID) == true,
+              let device = entities?.first(where: { $0.entityId == entityID }),
+              device.layout != "info", device.availableControls?.contains(action) == true else { return false }
+        return device.controls?.contains(action) ?? true
+    }
+
     let controllable: Set<String>?
     let entities: [Device]?
     let schemaVersion: String

@@ -20,6 +20,16 @@ struct HAEntity: Decodable, Identifiable {
         let min_temp: Double?
         let max_temp: Double?
         let supported_color_modes: [String]?
+        let color_temp_kelvin: Int?
+        let min_color_temp_kelvin: Int?
+        let max_color_temp_kelvin: Int?
+        let current_position: Int?
+        let current_tilt_position: Int?
+        let percentage: Int?
+        let direction: String?
+        let oscillating: Bool?
+        let swing_modes: [String]?
+        let source_list: [String]?
         let volume_level: Double?
         let color_mode: String?
         let effect_list: [String]?

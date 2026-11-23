@@ -30,8 +30,7 @@ final class StevoraPresence: NSObject, ObservableObject, CLLocationManagerDelega
     func bind(_ client: HAClient, installation: String, user: String) {
         let identity = [client.baseURL.absoluteString, installation, user].joined(separator: "\n")
         let key = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
-        api = client
-        guard key != scope else { return }
+        if key == scope { api = client; return }
         suspend()
         api = client
         scope = key

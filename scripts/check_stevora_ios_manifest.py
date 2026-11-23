@@ -16,10 +16,24 @@ checks = {
     "manifest-owned room projection": "projectedRooms" in model and "projectedEntities(in roomID:" in model,
     "manifest-owned device visibility": "model.projectedEntities.filter" in views and "model.projectedRooms.map" in views,
     "no silent HA expansion after manifest": "guard let manifest = stevoraManifest else { return [] }" in model and "allowed.contains($0.id)" in model,
-    "offline safety intact": "guard connected && liveConnected && stevoraManifest != nil" in model and model.count("guard allows(entity,") >= 8 and "manifest.controllable?.contains(entity.id) == true" in model and "device.availableControls?.contains(action) == true" in model,
+    "offline safety intact": "guard connected && liveConnected && stevoraManifest != nil" in model and model.count("guard allows(entity,") >= 8 and "manifest.permits(action, entityID: entity.id)" in model and "controllable?.contains(entityID) == true" in manifest,
     "backlight policy intact": 'contains("backlight")' in model and 'contains("backlight")' in views,
 }
 for description, passed in checks.items():
     print(("PASS" if passed else "FAIL") + ": " + description)
 if not all(checks.values()):
     raise SystemExit(1)
+
+# Run the production decoder and permission checks on the Apple build runner.
+import shutil
+import subprocess
+import tempfile
+
+if compiler := shutil.which("swiftc"):
+    with tempfile.TemporaryDirectory() as directory:
+        binary = Path(directory) / "dev4-manifest-test"
+        subprocess.run([compiler, sources / "StevoraManifest.swift",
+                        root / "STEVORA/ContractTests/Dev4ManifestTest.swift", "-o", binary], check=True)
+        subprocess.run([binary], check=True)
+else:
+    print("SKIP: Swift compiler unavailable for the runtime fixture")

@@ -100,15 +100,17 @@ enum StevoraAdminAPI {
         var name: String
         var icon: String
         var layout: String
-        var controls: [String]
+        var displayCategory: String? = nil
+        var controls: [String]?
         var areaId: String?
         var userIds: [String]
         enum CodingKeys: String, CodingKey {
             case name, icon, layout, controls
+            case displayCategory = "display_category"
             case areaId = "area_id"
             case userIds = "user_ids"
         }
-        static let empty = DeviceProfile(name: "", icon: "", layout: "compact", controls: [], areaId: nil, userIds: [])
+        static let empty = DeviceProfile(name: "", icon: "", layout: "compact", controls: nil, areaId: nil, userIds: [])
     }
 
     struct AssistantUser: Decodable, Identifiable {

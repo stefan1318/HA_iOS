@@ -258,10 +258,16 @@ struct StevoraManagersView: View {
                                 Text(model.localized("Автоматично", "Automatic")).tag("")
                                 ForEach(rooms.rooms) { room in Text(room.name).tag(room.id) }
                             }
+                            Toggle(model.localized("Автоматични контроли", "Automatic controls"), isOn: Binding(
+                                get: { deviceProfiles[entity.entityId]?.controls == nil },
+                                set: { automatic in deviceProfiles[entity.entityId, default: .empty].controls = automatic ? nil : [] }
+                            ))
+                            if deviceProfiles[entity.entityId]?.controls != nil {
                             TextField(model.localized("Контроли (разделени със запетая)", "Controls (comma-separated)"), text: Binding(
                                 get: { (deviceProfiles[entity.entityId]?.controls ?? []).joined(separator: ",") },
                                 set: { deviceProfiles[entity.entityId, default: .empty].controls = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
                             ))
+                            }
                             TextField(model.localized("Потребителски ID (със запетая)", "User IDs (comma-separated)"), text: Binding(
                                 get: { (deviceProfiles[entity.entityId]?.userIds ?? []).joined(separator: ",") },
                                 set: { deviceProfiles[entity.entityId, default: .empty].userIds = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }

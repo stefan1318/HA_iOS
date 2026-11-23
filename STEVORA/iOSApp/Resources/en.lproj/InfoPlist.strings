@@ -1,0 +1,2 @@
+"NSLocationWhenInUseUsageDescription" = "Send the location of this iPhone to your selected STEVORA home for presence and automations.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Keep presence up to date when STEVORA is in the background.";

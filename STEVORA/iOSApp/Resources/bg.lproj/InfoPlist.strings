@@ -1,0 +1,2 @@
+"NSLocationWhenInUseUsageDescription" = "Изпраща местоположението на този iPhone към избрания дом за присъствие и автоматизации.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Обновява присъствието в избрания дом, когато STEVORA работи във фонов режим.";

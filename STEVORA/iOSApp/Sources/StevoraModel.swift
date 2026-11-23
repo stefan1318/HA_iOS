@@ -11,6 +11,7 @@ final class StevoraModel: ObservableObject {
     @Published private(set) var isAdmin = false
     private var userID: String?
     private var session = UUID()
+    @Published private(set) var savingLanguage = false
     private let oauth = StevoraOAuth()
     @Published var isOAuthSession = false
     @Published var selectedRoom = "all"
@@ -54,6 +55,7 @@ final class StevoraModel: ObservableObject {
             let url = try HAClient(address: address, token: "temporary", allowLocalHTTP: allowLocalHTTP).baseURL
             let auth = try await oauth.authorizationCode(server: url)
             let tokens = try await StevoraTokenAPI.exchange(server: url, code: auth.code, verifier: auth.verifier)
+            guard url == (try client()).baseURL else { throw HAError.invalidURL }
             guard CredentialStore.save(tokens.access_token, key: "access_token") else { throw HAError.unexpectedResponse }
             if let refresh = tokens.refresh_token {
                 guard CredentialStore.save(refresh, key: "refresh_token") else { throw HAError.unexpectedResponse }
@@ -72,12 +74,20 @@ final class StevoraModel: ObservableObject {
         await connect(persist: false)
     }
 
-    private var favoriteKey: String {
+    private var legacyFavoriteKey: String {
         let host = (URL(string: address)?.host ?? address).lowercased()
         let fingerprint = SHA256.hash(data: Data(token.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
         return "stevora.favorites.\(host).\(fingerprint)"
     }
+    private var favoriteKey: String? {
+        guard let installation = stevoraManifest?.installationId, let userID else { return nil }
+        let scope = [address, installation, userID].joined(separator: "\n")
+        let hash = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "stevora.favorites.v2." + hash
+    }
+
     func toggleFavorite(_ id: String) {
+        guard let favoriteKey, projectedEntities.contains(where: { $0.id == id }) else { return }
         if favorites.contains(id) { favorites.remove(id) } else { favorites.insert(id) }
         UserDefaults.standard.set(Array(favorites), forKey: favoriteKey)
     }
@@ -118,7 +128,7 @@ final class StevoraModel: ObservableObject {
             }
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
-            favorites = Set(UserDefaults.standard.stringArray(forKey: favoriteKey) ?? [])
+            favorites = []
             connected = true
             connectionMode = "STEVORA OS"
             stevoraManifest = nil
@@ -153,11 +163,19 @@ final class StevoraModel: ObservableObject {
             self.accountName = user["name"] as? String
             self.isAdmin = user["is_admin"] as? Bool == true || user["is_owner"] as? Bool == true
             self.bindPresence()
+        }, onLanguage: { [weak self] language in
+            self?.language = language
         }, onReconnect: { [weak self] in
             self?.liveConnected = false
             self?.connectionMode = "STEVORA OS"
             self?.stevoraManifest = nil
             self?.clearIdentity()
+        }, onAuthExpired: { [weak self] in
+            guard let self else { return }
+            self.liveConnected = false
+            self.stevoraManifest = nil
+            self.clearIdentity()
+            await self.connect(persist: false)
         }, onManifest: { [weak self] manifest in
             self?.receiveManifest(manifest)
         })
@@ -167,6 +185,13 @@ final class StevoraModel: ObservableObject {
         guard liveConnected, let manifest = stevoraManifest, let userID, !userID.isEmpty, let api = try? client() else {
             presence.suspend()
             return
+        }
+        if let favoriteKey {
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: favoriteKey) == nil, let saved = defaults.stringArray(forKey: legacyFavoriteKey) {
+                defaults.set(saved, forKey: favoriteKey)
+            }
+            favorites = Set(defaults.stringArray(forKey: favoriteKey) ?? [])
         }
         presence.bind(api, installation: manifest.installationId, user: userID)
     }
@@ -184,12 +209,10 @@ final class StevoraModel: ObservableObject {
 
     func allows(_ entity: HAEntity, _ action: String) -> Bool {
         guard connected && liveConnected && stevoraManifest != nil,
-              let manifest = stevoraManifest, manifest.controllable?.contains(entity.id) == true,
-              let device = manifest.entities?.first(where: { $0.entityId == entity.id }),
-              device.layout != "info", let state = entities.first(where: { $0.id == entity.id }),
+              let manifest = stevoraManifest, let state = entities.first(where: { $0.id == entity.id }),
               !["unknown", "unavailable"].contains(state.state),
               !state.id.lowercased().contains("backlight") else { return false }
-        return device.availableControls?.contains(action) == true && (device.controls?.contains(action) ?? true)
+        return manifest.permits(action, entityID: entity.id)
     }
 
     func receiveManifest(_ manifest: StevoraManifest?) {
@@ -333,6 +356,25 @@ final class StevoraModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
+    func setDetailValue(_ entity: HAEntity, action: String, field: String, value: Any) async {
+        guard allows(entity, action) else { return }
+        let service: String
+        switch (entity.domain, action, field) {
+        case ("light", "color_temp", "color_temp_kelvin"): service = "turn_on"
+        case ("cover", "position", "position"): service = "set_cover_position"
+        case ("cover", "tilt", "tilt_position"): service = "set_cover_tilt_position"
+        case ("fan", "percentage", "percentage"): service = "set_percentage"
+        case ("fan", "direction", "direction"): service = "set_direction"
+        case ("fan", "oscillate", "oscillating"): service = "oscillate"
+        case ("fan", "preset_mode", "preset_mode"): service = "set_preset_mode"
+        case ("climate", "swing_mode", "swing_mode"): service = "set_swing_mode"
+        case ("media_player", "source", "source"): service = "select_source"
+        default: return
+        }
+        do { try await client().service(domain: entity.domain, action: service, entityID: entity.id, extra: [field: value]) }
+        catch { self.error = error.localizedDescription }
+    }
+
     func mediaOrCover(_ entity: HAEntity, action: String, volume: Double? = nil) async {
         guard allows(entity, action) else { return }
         let service: String
@@ -355,14 +397,27 @@ final class StevoraModel: ObservableObject {
         UserDefaults.standard.set(allowed, forKey: "stevora.allowLocalHTTP")
     }
 
-    func setLanguage(_ newValue: String) {
-        guard newValue != language else { return }
-        language = newValue
-        UserDefaults.standard.set(newValue, forKey: "stevora.language")
-        if connected {
+    func setLanguage(_ value: String) async {
+        guard value != language, ["bg", "en"].contains(value), !savingLanguage, liveConnected else { return }
+        let attempt = session
+        savingLanguage = true
+        defer { savingLanguage = false }
+        do {
+            let gateway = StevoraAssistantGateway(address: address, token: token, allowLocalHTTP: allowLocalHTTP)
+            let key = ["key": "stevora_profile"]
+            let existing = try await gateway.adminRequest("frontend/get_user_data", fields: key)
+            var profile = existing["value"] as? [String: Any] ?? [:]
+            profile["language"] = value
+            guard session == attempt, connected else { return }
+            _ = try await gateway.adminRequest("frontend/set_user_data", fields: ["key": "stevora_profile", "value": profile])
+            guard session == attempt, connected else { return }
+            language = value
+            UserDefaults.standard.set(value, forKey: "stevora.language")
             liveConnected = false
             stevoraManifest = nil
             startLiveUpdates()
+        } catch {
+            if session == attempt { self.error = localized("Езикът не бе запазен в дома.", "Could not save the home profile language.") }
         }
     }
 

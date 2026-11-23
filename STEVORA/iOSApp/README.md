@@ -1,25 +1,17 @@
-# STEVORA iOS — Beta 2 development candidate
+# STEVORA iOS for OS Dev4
 
-Native SwiftUI STEVORA app built independently with XcodeGen, minimum iOS 16.4.
+The native SwiftUI target lives in this folder. XcodeGen builds `com.stevora.companion.ios` for iOS 16.4 and later. The device workflow packages an unsigned IPA for development signing.
 
-## Implemented in source
-- BG/EN branded dark UI, STEVORA monogram app icon and launch storyboard.
-- Native devices, lights, climate, scenes, favorites, quick home temperature/humidity summary.
-- Home Assistant REST service calls and event-driven WebSocket state changes with reconnect.
-- OAuth2 authorization-code with PKCE via ASWebAuthenticationSession, access/refresh token Keychain storage and refresh on REST 401.
-- Development-only long-lived token fallback, to be removed after OAuth device verification.
-- Native Assist text chat via /api/conversation/process and iOS Speech microphone transcription.
-- Provisional room filter based on entity names, NOT Home Assistant area registry.
-- Backlight controls hidden, no backlight power state changed.
+## Home and settings
 
-## Important limitations and release blockers
-- This is a **development candidate**, not a tested or published Beta 2. Confirm GitHub Actions device and simulator builds, then test on a physical iPhone.
-- OAuth redirect/client_id compatibility must be verified against the actual Home Assistant instance. Session expiration during WebSocket operation requires further work.
-- Voice transcription is push-to-talk, NOT wake-word listening; Home Assistant conversation agent must be configured.
-- The app icon is a generated STEVORA S monogram, not the final approved original STEVORA brand artwork. Replace with the original vector/PNG before release.
-- True room/area mapping, accessibility audit, full color/light controls, security audit, app lifecycle and background reliability, tests and TestFlight distribution remain pending.
-- Unsigned IPA requires AltStore/Apple signing. No app-store production signing is included.
-- All network access requires valid HTTPS trust. Never disable TLS verification.
+Sign in to the selected home using OAuth and MFA. HTTPS uses normal certificate validation. Local HTTP requires explicit consent and a private IPv4 address. Rooms, device names, available controls, account role and assistant selection come from the authenticated home. Device details and climate history use the permitted entities. A device profile can restrict its controls further, including to an empty list.
 
-## Build
-The device workflow generates a PNG icon using Swift/AppKit on the macOS runner, generates the Xcode project with XcodeGen, builds an unsigned iOS app and uploads an unsigned IPA.
+The app reads the Dev4 profile language on connection. Changing the language in Settings saves BG or EN to the current OS profile. Open STEVORA OS from Settings for the full system and account catalog.
+
+## iPhone presence
+
+In Settings, enable **Share location** and grant the iOS location permission. This registers the iPhone with the selected home's Mobile App integration on the current user's account. The registration credential is kept in Keychain. Background updates have a separate switch and require **Always** access in iOS. Updates rely on network reachability and the location delivery iOS permits. Turning off sharing stops collection and further uploads. Switch accounts or homes to manage consent for each independently.
+
+## Device acceptance
+
+Verify an upgrade on a signed iPhone, OAuth and MFA, local HTTP and trusted HTTPS, allowed and read-only accounts, translated names after a live profile edit, offline/reconnect, foreground and background location reports, permission withdrawal and two independent homes. A successful unsigned build does not establish these results.

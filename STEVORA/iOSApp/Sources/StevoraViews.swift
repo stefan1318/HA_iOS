@@ -435,6 +435,10 @@ private struct StevoraDashboard: View {
                 metric(model.localized("ВЛАЖНОСТ", "HUMIDITY"),
                        value: roomHumidity == "—" ? "—" : roomHumidity + "%", symbol: "humidity.fill")
             }
+            if model.liveConnected, let manifest = model.stevoraManifest {
+                StevoraClimateHistory(temperature: temperatureSensor, humidity: humiditySensor)
+                    .id(manifest.installationId)
+            }
             ForEach(controls.filter { $0.domain == "climate" }) { device in
                 StevoraDeviceCard(entity: device, name: model.displayName(device))
             }
@@ -475,11 +479,11 @@ private struct StevoraDashboard: View {
                 Text(model.localized("Език", "Language")).font(.headline)
                 Picker("Language", selection: Binding(
                     get: { model.language },
-                    set: { model.setLanguage($0) }
+                    set: { value in Task { await model.setLanguage(value) } }
                 )) {
                     Text("Български").tag("bg")
                     Text("English").tag("en")
-                }.pickerStyle(.segmented)
+                }.pickerStyle(.segmented).disabled(model.savingLanguage || !model.liveConnected)
                 if let name = model.accountName {
                     LabeledContent(model.localized("Профил", "Account"), value: name)
                 }
@@ -505,6 +509,7 @@ private struct StevoraDeviceCard: View {
     let entity: HAEntity
     let name: String
     @State private var expanded = false
+    @State private var showDetails = false
     @State private var brightness = 50.0
     @State private var red = 255.0
     @State private var green = 100.0
@@ -524,10 +529,15 @@ private struct StevoraDeviceCard: View {
             HStack(spacing: 12) {
                 Image(systemName: symbol).font(.title3).foregroundStyle(Brand.cyan)
                     .frame(width: 34)
-                VStack(alignment: .leading, spacing: 3) {
+                Button { showDetails.toggle() } label: {
+                    VStack(alignment: .leading, spacing: 3) {
                     Text(name).font(.headline)
-                    Text(entity.state).font(.caption).foregroundStyle(Brand.muted)
-                }
+                    Text(entity.state + (entity.attributes.unit_of_measurement.map { " " + $0 } ?? ""))
+                        .font(.caption).foregroundStyle(Brand.muted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: showDetails ? "chevron.up" : "chevron.down")
+                }.buttonStyle(.plain)
                 Spacer(minLength: 4)
                 Button { model.toggleFavorite(entity.id) } label: {
                     Image(systemName: model.favorites.contains(entity.id) ? "star.fill" : "star")
@@ -543,118 +553,121 @@ private struct StevoraDeviceCard: View {
                     }.accessibilityLabel(entity.state == "on" ? "Turn off" : "Turn on")
                 }
             }
-            if model.allows(entity, "temperature"), let target = entity.attributes.temperature {
-                HStack(spacing: 14) {
-                    Text(model.localized("Зададена", "Target") + ": \(Int(target))°")
-                        .font(.subheadline)
-                    Spacer()
-                    Button { Task { await model.setTemperature(entity, value: max(entity.attributes.min_temp ?? 7, target - 1)) } } label: {
-                        Image(systemName: "minus.circle.fill").font(.title2)
-                    }
-                    Button { Task { await model.setTemperature(entity, value: min(entity.attributes.max_temp ?? 35, target + 1)) } } label: {
-                        Image(systemName: "plus.circle.fill").font(.title2)
-                    }
-                }.foregroundStyle(Brand.cyan)
-            }
-            StevoraMediaCoverControls(entity: entity)
-            if entity.domain == "climate" {
-                if model.allows(entity, "hvac_mode"), let modes = entity.attributes.hvac_modes, !modes.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(modes, id: \.self) { mode in
-                                    Button(model.localized([
-                                        "off": "Изключен", "heat": "Отопление",
-                                        "cool": "Охлаждане", "dry": "Изсушаване",
-                                        "fan_only": "Вентилатор", "auto": "Автоматично",
-                                        "heat_cool": "Автоматичен климат"
-                                    ][mode] ?? mode, mode)) {
-                                        Task { await model.setClimateMode(entity, mode: mode) }
+            if showDetails {
+                Text(entity.id).font(.caption2).foregroundStyle(Brand.muted)
+                if model.allows(entity, "temperature"), let target = entity.attributes.temperature {
+                    HStack(spacing: 14) {
+                        Text(model.localized("Зададена", "Target") + ": \(Int(target))°")
+                            .font(.subheadline)
+                        Spacer()
+                        Button { Task { await model.setTemperature(entity, value: max(entity.attributes.min_temp ?? 7, target - 1)) } } label: {
+                            Image(systemName: "minus.circle.fill").font(.title2)
+                        }
+                        Button { Task { await model.setTemperature(entity, value: min(entity.attributes.max_temp ?? 35, target + 1)) } } label: {
+                            Image(systemName: "plus.circle.fill").font(.title2)
+                        }
+                    }.foregroundStyle(Brand.cyan)
+                }
+                StevoraMediaCoverControls(entity: entity)
+                if entity.domain == "climate" {
+                    if model.allows(entity, "hvac_mode"), let modes = entity.attributes.hvac_modes, !modes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack {
+                                    ForEach(modes, id: \.self) { mode in
+                                        Button(model.localized([
+                                            "off": "Изключен", "heat": "Отопление",
+                                            "cool": "Охлаждане", "dry": "Изсушаване",
+                                            "fan_only": "Вентилатор", "auto": "Автоматично",
+                                            "heat_cool": "Автоматичен климат"
+                                        ][mode] ?? mode, mode)) {
+                                            Task { await model.setClimateMode(entity, mode: mode) }
+                                        }
+                                            .buttonStyle(.bordered)
+                                            .tint(entity.state == mode ? Brand.cyan : Brand.muted)
                                     }
-                                        .buttonStyle(.bordered)
-                                        .tint(entity.state == mode ? Brand.cyan : Brand.muted)
                                 }
                             }
                         }
                     }
-                }
-                if model.allows(entity, "fan_mode"), let modes = entity.attributes.fan_modes, !modes.isEmpty {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(model.localized("Вентилатор", "Fan speed")).font(.caption).foregroundStyle(Brand.muted)
-                        Picker("Fan", selection: Binding(
-                            get: { entity.attributes.fan_mode ?? modes[0] },
-                            set: { value in Task { await model.setFanMode(entity, mode: value) } }
+                    if model.allows(entity, "fan_mode"), let modes = entity.attributes.fan_modes, !modes.isEmpty {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(model.localized("Вентилатор", "Fan speed")).font(.caption).foregroundStyle(Brand.muted)
+                            Picker("Fan", selection: Binding(
+                                get: { entity.attributes.fan_mode ?? modes[0] },
+                                set: { value in Task { await model.setFanMode(entity, mode: value) } }
+                            )) {
+                                ForEach(modes, id: \.self) { Text($0).tag($0) }
+                            }.pickerStyle(.menu)
+                        }
+                    }
+                    if model.allows(entity, "preset_mode"), let presets = entity.attributes.preset_modes, !presets.isEmpty {
+                        Picker("Preset", selection: Binding(
+                            get: { entity.attributes.preset_mode ?? presets[0] },
+                            set: { value in Task { await model.setPresetMode(entity, mode: value) } }
                         )) {
-                            ForEach(modes, id: \.self) { Text($0).tag($0) }
+                            ForEach(presets, id: \.self) { Text($0).tag($0) }
                         }.pickerStyle(.menu)
                     }
                 }
-                if model.allows(entity, "preset_mode"), let presets = entity.attributes.preset_modes, !presets.isEmpty {
-                    Picker("Preset", selection: Binding(
-                        get: { entity.attributes.preset_mode ?? presets[0] },
-                        set: { value in Task { await model.setPresetMode(entity, mode: value) } }
-                    )) {
-                        ForEach(presets, id: \.self) { Text($0).tag($0) }
-                    }.pickerStyle(.menu)
-                }
-            }
-            if entity.domain == "light" && ["brightness", "color", "effect"].contains(where: { model.allows(entity, $0) }) {
-                Button {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
-                } label: {
-                    HStack {
-                        Text(model.localized("Яркост и цвят", "Brightness & color"))
-                        Spacer()
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    }.font(.caption).foregroundStyle(Brand.muted)
-                }.buttonStyle(StevoraTouchStyle())
-                if expanded {
-                    if model.allows(entity, "brightness") {
-                    HStack(spacing: 10) {
-                        Image(systemName: "sun.min").foregroundStyle(Brand.cyan)
-                        Slider(value: $brightness, in: 1...100, step: 1) { editing in
-                            if !editing { Task { await model.setBrightness(entity, value: brightness) } }
+                if entity.domain == "light" && ["brightness", "color", "effect"].contains(where: { model.allows(entity, $0) }) {
+                    Button {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
+                    } label: {
+                        HStack {
+                            Text(model.localized("Яркост и цвят", "Brightness & color"))
+                            Spacer()
+                            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        }.font(.caption).foregroundStyle(Brand.muted)
+                    }.buttonStyle(StevoraTouchStyle())
+                    if expanded {
+                        if model.allows(entity, "brightness") {
+                        HStack(spacing: 10) {
+                            Image(systemName: "sun.min").foregroundStyle(Brand.cyan)
+                            Slider(value: $brightness, in: 1...100, step: 1) { editing in
+                                if !editing { Task { await model.setBrightness(entity, value: brightness) } }
+                            }
+                            Image(systemName: "sun.max").foregroundStyle(Brand.cyan)
                         }
-                        Image(systemName: "sun.max").foregroundStyle(Brand.cyan)
-                    }
-                    }
-                    if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: {
-                        ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0)
-                    }) == true {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(model.localized("RGB цвят", "RGB color")).font(.caption)
-                            HStack {
-                                Text("R").foregroundStyle(.red)
-                                Slider(value: $red, in: 0...255, step: 1)
-                            }
-                            HStack {
-                                Text("G").foregroundStyle(.green)
-                                Slider(value: $green, in: 0...255, step: 1)
-                            }
-                            HStack {
-                                Text("B").foregroundStyle(.blue)
-                                Slider(value: $blue, in: 0...255, step: 1)
-                            }
-                            Button(model.localized("Приложи цвят", "Apply color")) {
-                                Task { await model.setColor(entity, rgb: [Int(red), Int(green), Int(blue)]) }
-                            }.buttonStyle(.borderedProminent)
                         }
-                    }
-                    if model.allows(entity, "effect"), let effects = entity.attributes.effect_list, !effects.isEmpty {
-                        Picker("Effect", selection: Binding(
-                            get: { entity.attributes.effect ?? effects[0] },
-                            set: { value in Task { await model.setLightEffect(entity, effect: value) } }
-                        )) {
-                            ForEach(effects, id: \.self) { Text($0).tag($0) }
-                        }.pickerStyle(.menu)
-                    }
-                    if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: { ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0) }) == true {
-                        HStack(spacing: 13) {
-                            colorDot(.red, rgb: [255, 0, 0])
-                            colorDot(.pink, rgb: [255, 25, 130])
-                            colorDot(.blue, rgb: [0, 100, 255])
-                            colorDot(.white, rgb: [255, 255, 255])
+                        if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: {
+                            ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0)
+                        }) == true {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(model.localized("RGB цвят", "RGB color")).font(.caption)
+                                HStack {
+                                    Text("R").foregroundStyle(.red)
+                                    Slider(value: $red, in: 0...255, step: 1)
+                                }
+                                HStack {
+                                    Text("G").foregroundStyle(.green)
+                                    Slider(value: $green, in: 0...255, step: 1)
+                                }
+                                HStack {
+                                    Text("B").foregroundStyle(.blue)
+                                    Slider(value: $blue, in: 0...255, step: 1)
+                                }
+                                Button(model.localized("Приложи цвят", "Apply color")) {
+                                    Task { await model.setColor(entity, rgb: [Int(red), Int(green), Int(blue)]) }
+                                }.buttonStyle(.borderedProminent)
+                            }
+                        }
+                        if model.allows(entity, "effect"), let effects = entity.attributes.effect_list, !effects.isEmpty {
+                            Picker("Effect", selection: Binding(
+                                get: { entity.attributes.effect ?? effects[0] },
+                                set: { value in Task { await model.setLightEffect(entity, effect: value) } }
+                            )) {
+                                ForEach(effects, id: \.self) { Text($0).tag($0) }
+                            }.pickerStyle(.menu)
+                        }
+                        if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: { ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0) }) == true {
+                            HStack(spacing: 13) {
+                                colorDot(.red, rgb: [255, 0, 0])
+                                colorDot(.pink, rgb: [255, 25, 130])
+                                colorDot(.blue, rgb: [0, 100, 255])
+                                colorDot(.white, rgb: [255, 255, 255])
+                            }
                         }
                     }
                 }

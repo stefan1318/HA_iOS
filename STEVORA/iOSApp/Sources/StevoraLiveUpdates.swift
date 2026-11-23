@@ -11,7 +11,9 @@ final class StevoraLiveUpdates {
     func start(address: String, token: String, language: String = "bg", allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
                onReady: @escaping @MainActor () -> Void,
                onUser: @escaping @MainActor ([String: Any]) -> Void,
+               onLanguage: @escaping @MainActor (String) -> Void,
                onReconnect: @escaping @MainActor () async -> Void,
+               onAuthExpired: @escaping @MainActor () async -> Void,
                onManifest: @escaping @MainActor (StevoraManifest?) -> Void) {
         stop()
         generation += 1
@@ -21,8 +23,12 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onUser: onUser, onManifest: onManifest)
+                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onUser: onUser, onLanguage: onLanguage, onManifest: onManifest)
                     delay = 1
+                } catch HAError.unauthorized {
+                    guard !Task.isCancelled, current == self.generation else { return }
+                    await onAuthExpired()
+                    return
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
                 }
@@ -47,6 +53,7 @@ final class StevoraLiveUpdates {
                         onChange: @escaping @MainActor (HAEntity) -> Void,
                         onReady: @escaping @MainActor () -> Void,
                onUser: @escaping @MainActor ([String: Any]) -> Void,
+               onLanguage: @escaping @MainActor (String) -> Void,
                         onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
         guard let baseURL = URL(string: address),
               StevoraTransportPolicy.permits(baseURL, allowLocalHTTP: allowLocalHTTP),
@@ -64,10 +71,13 @@ final class StevoraLiveUpdates {
 
         var authenticated = false
         var subscribed = false
-        var requestID = 3
+        var requestID = 4
+        var profileLoaded = false
+        var manifestLanguage = language
         var fetchingManifest = false
         var manifestDirty = false
         func requestManifest() async throws {
+            guard profileLoaded else { return }
             if fetchingManifest {
                 manifestDirty = true
                 return
@@ -75,7 +85,7 @@ final class StevoraLiveUpdates {
             fetchingManifest = true
             manifestDirty = false
             requestID += 1
-            try await send(["id": requestID, "type": "stevora/os/v1/manifest", "language": language == "en" ? "en" : "bg"], on: task)
+            try await send(["id": requestID, "type": "stevora/os/v1/manifest", "language": manifestLanguage == "en" ? "en" : "bg"], on: task)
         }
         while !Task.isCancelled {
             let message = try await task.receive()
@@ -103,10 +113,16 @@ final class StevoraLiveUpdates {
                     }
                     subscribed = true
                     onReady()
-                    try await send(["id": 3, "type": "auth/current_user"], on: task)
                     try await send(["id": 2, "type": "stevora/os/v1/manifest/subscribe"], on: task)
-                } else if let id = json["id"] as? Int, id == 2 {
-                    // Older OS releases still support the initial snapshot.
+                    try await send(["id": 3, "type": "auth/current_user"], on: task)
+                    try await send(["id": 4, "type": "frontend/get_user_data", "key": "stevora_profile"], on: task)
+                } else if json["id"] as? Int == 4 {
+                    if let result = json["result"] as? [String: Any], let value = result["value"] as? [String: Any],
+                       let preferred = value["language"] as? String, ["en", "bg"].contains(preferred) {
+                        manifestLanguage = preferred
+                        onLanguage(preferred)
+                    }
+                    profileLoaded = true
                     try await requestManifest()
                 } else if json["id"] as? Int == 3, let user = json["result"] as? [String: Any] {
                     onUser(user)
