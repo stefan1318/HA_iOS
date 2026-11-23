@@ -120,17 +120,28 @@ jobs:
           set -euo pipefail
           xcodegen generate
           device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime,items in reversed(list(devices.items())) if "iOS" in runtime for d in items if d["name"].startswith("iPhone")))')
+          echo "Selected simulator: $device"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl status_bar "$device" override --time "9:41" || true
+          # Pre-boot and use a single test runner to avoid UI snapshot contention.
           xcodebuild -scheme SettingsFixture -project StevoraSettingsTests.xcodeproj \
-            -destination "id=$device" -parallel-testing-enabled NO \
+            -destination "id=$device" -destination-timeout 120 \
+            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
             -resultBundlePath "$RUNNER_TEMP/settings-ui.xcresult" test
       - name: Export settings screenshots
-        run: xcrun xcresulttool export attachments --path "$RUNNER_TEMP/settings-ui.xcresult" --output-path "$RUNNER_TEMP/settings-screenshots"
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/settings-ui.xcresult" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/settings-ui.xcresult" --output-path "$RUNNER_TEMP/settings-screenshots"
+          fi
       - name: Upload settings screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: STEVORA-settings-screenshots
           path: ${{ runner.temp }}/settings-screenshots
-          if-no-files-found: error
+          if-no-files-found: warn
       - name: Upload settings test results
         if: always()
         uses: actions/upload-artifact@v4
