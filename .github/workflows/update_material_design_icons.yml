@@ -1,10 +1,6 @@
 name: Update Material Design Icons
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly. Checks for a newer MaterialDesignIcons release; if there is one it
-    # bumps the pinned version, regenerates the font, and opens a PR.
-    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
