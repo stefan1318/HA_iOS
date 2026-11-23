@@ -1,10 +1,6 @@
 name: Update Brand Icons
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly. Regenerates BrandIcon.swift from the logos the frontend `dev` branch
-    # bundles and opens a PR when they changed.
-    - cron: '0 8 * * 1'
 
 permissions:
   contents: read
