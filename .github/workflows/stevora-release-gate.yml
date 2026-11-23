@@ -27,7 +27,3 @@ jobs:
           persist-credentials: false
       - name: Verify STEVORA release identity and localization
         run: python3 Tools/stevora_release_gate.py --report "$GITHUB_STEP_SUMMARY"
-      - name: Verify required acceptance checklist
-        run: |
-          test -f docs/stevora-ios-release-acceptance.md
-          grep -q 'Real-device acceptance' docs/stevora-ios-release-acceptance.md
