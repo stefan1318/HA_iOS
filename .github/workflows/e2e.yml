@@ -1,15 +1,6 @@
 name: E2E
 
 on:
-  schedule:
-    # Every morning at 05:00 UTC, on the default branch, matching home-assistant/android: onboarding.
-    - cron: "0 5 * * *"
-    # An hour later, the device restored from another device's backup. Each flow onboards from the
-    # welcome screen on an erased simulator, so they run one per job rather than back to back.
-    - cron: "0 6 * * *"
-    # Then onboarding through a proxy that requires a client certificate (mTLS), matching
-    # home-assistant/android's `onboarding-mtls`.
-    - cron: "0 7 * * *"
   # Manual run on any branch carrying this workflow.
   workflow_dispatch:
     inputs:
