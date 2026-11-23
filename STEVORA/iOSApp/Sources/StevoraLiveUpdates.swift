@@ -10,6 +10,7 @@ final class StevoraLiveUpdates {
 
     func start(address: String, token: String, language: String = "bg", allowLocalHTTP: Bool = false, onChange: @escaping @MainActor (HAEntity) -> Void,
                onReady: @escaping @MainActor () -> Void,
+               onUser: @escaping @MainActor ([String: Any]) -> Void,
                onReconnect: @escaping @MainActor () async -> Void,
                onManifest: @escaping @MainActor (StevoraManifest?) -> Void) {
         stop()
@@ -20,16 +21,16 @@ final class StevoraLiveUpdates {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 do {
-                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onManifest: onManifest)
+                    try await self.listen(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: onChange, onReady: onReady, onUser: onUser, onManifest: onManifest)
                     delay = 1
                 } catch {
                     // A temporary loss of network connectivity is expected on mobile.
                 }
                 guard !Task.isCancelled, current == self.generation else { return }
+                await onReconnect()
                 try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
                 delay = min(delay * 2, 30)
                 guard !Task.isCancelled, current == self.generation else { return }
-                await onReconnect()
             }
         }
     }
@@ -45,6 +46,7 @@ final class StevoraLiveUpdates {
     private func listen(address: String, token: String, language: String, allowLocalHTTP: Bool,
                         onChange: @escaping @MainActor (HAEntity) -> Void,
                         onReady: @escaping @MainActor () -> Void,
+               onUser: @escaping @MainActor ([String: Any]) -> Void,
                         onManifest: @escaping @MainActor (StevoraManifest?) -> Void) async throws {
         guard let baseURL = URL(string: address),
               StevoraTransportPolicy.permits(baseURL, allowLocalHTTP: allowLocalHTTP),
@@ -62,7 +64,7 @@ final class StevoraLiveUpdates {
 
         var authenticated = false
         var subscribed = false
-        var requestID = 2
+        var requestID = 3
         var fetchingManifest = false
         var manifestDirty = false
         func requestManifest() async throws {
@@ -101,10 +103,13 @@ final class StevoraLiveUpdates {
                     }
                     subscribed = true
                     onReady()
+                    try await send(["id": 3, "type": "auth/current_user"], on: task)
                     try await send(["id": 2, "type": "stevora/os/v1/manifest/subscribe"], on: task)
                 } else if let id = json["id"] as? Int, id == 2 {
                     // Older OS releases still support the initial snapshot.
                     try await requestManifest()
+                } else if json["id"] as? Int == 3, let user = json["result"] as? [String: Any] {
+                    onUser(user)
                 } else if let id = json["id"] as? Int, id == requestID, fetchingManifest {
                     fetchingManifest = false
                     if json["success"] as? Bool == true,

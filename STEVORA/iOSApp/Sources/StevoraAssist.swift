@@ -27,12 +27,12 @@ final class StevoraAssistModel: ObservableObject {
     private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
 
-    func inspect(address: String, token: String) async {
+    func inspect(address: String, token: String, allowLocalHTTP: Bool) async {
         guard !busy else { return }
         route = nil
         status = "Verifying Home Hub account…"
         do {
-            let selected = try await StevoraAssistantGateway(address: address, token: token).inspect()
+            let selected = try await StevoraAssistantGateway(address: address, token: token, allowLocalHTTP: allowLocalHTTP).inspect()
             if selected.pipelineID != selectedPipelineID {
                 conversationID = nil
                 messages = []
@@ -50,7 +50,7 @@ final class StevoraAssistModel: ObservableObject {
         }
     }
 
-    func send(address: String, token: String) async {
+    func send(address: String, token: String, allowLocalHTTP: Bool, language: String) async {
         let message = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !busy, route != nil else { return }
         busy = true
@@ -60,7 +60,7 @@ final class StevoraAssistModel: ObservableObject {
         defer { busy = false }
         do {
             let (answer, newID, verified) = try await StevoraAssistantGateway(
-                address: address, token: token
+                address: address, token: token, allowLocalHTTP: allowLocalHTTP
             ).converse(text: message, conversationID: conversationID,
                        expectedPipelineID: selectedPipelineID ?? "")
             // The session is reverified server-side on every command.
@@ -77,7 +77,7 @@ final class StevoraAssistModel: ObservableObject {
             route = verified
             status = "\(verified.pipelineName) • \(verified.roleLabel)"
             messages.append(StevoraMessage(role: "assistant", content: answer))
-            if voiceReplies { speak(answer) }
+            if voiceReplies { speak(answer, language: language) }
         } catch {
             route = nil
             selectedPipelineID = nil
@@ -87,17 +87,17 @@ final class StevoraAssistModel: ObservableObject {
         }
     }
 
-    private func speak(_ text: String) {
+    private func speak(_ text: String, language: String) {
         let plain = text.replacingOccurrences(of: "**", with: "")
             .replacingOccurrences(of: "###", with: "")
         let utterance = AVSpeechUtterance(string: plain)
-        utterance.voice = AVSpeechSynthesisVoice(language: "bg-BG")
+        utterance.voice = AVSpeechSynthesisVoice(language: language == "bg" ? "bg-BG" : "en-US")
         utterance.rate = 0.48
         speaker.stopSpeaking(at: .immediate)
         speaker.speak(utterance)
     }
 
-    func startListening() async {
+    func startListening(language: String) async {
         guard route != nil else { error = "Verify account and Assist pipeline first"; return }
         speaker.stopSpeaking(at: .immediate)
         guard !listening else { stopListening(); return }
@@ -107,7 +107,7 @@ final class StevoraAssistModel: ObservableObject {
             }
         }
         guard authorized else { error = "Разреши разпознаването на реч в Settings → STEVORA."; return }
-        let locales = ["bg-BG", "en-US", "en-GB"]
+        let locales = language == "bg" ? ["bg-BG"] : ["en-US", "en-GB"]
         recognizer = locales.compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
             .first(where: { $0.isAvailable })
         guard recognizer != nil else {
@@ -187,7 +187,7 @@ struct StevoraAssistView: View {
                 }
                 Spacer()
                 Button {
-                    Task { await assistant.inspect(address: model.address, token: model.token) }
+                    Task { await assistant.inspect(address: model.address, token: model.token, allowLocalHTTP: model.allowLocalHTTP) }
                 } label: {
                     Image(systemName: "arrow.clockwise").font(.headline)
                 }
@@ -273,7 +273,7 @@ struct StevoraAssistView: View {
                     if assistant.listening {
                         assistant.stopListening()
                     } else {
-                        Task { await assistant.startListening() }
+                        Task { await assistant.startListening(language: model.language) }
                     }
                 } label: {
                     Image(systemName: assistant.listening ? "stop.circle.fill" : "mic.fill")
@@ -285,7 +285,7 @@ struct StevoraAssistView: View {
                 Button {
                     if assistant.listening { assistant.stopListening() }
                     composerFocused = false
-                    Task { await assistant.send(address: model.address, token: model.token) }
+                    Task { await assistant.send(address: model.address, token: model.token, allowLocalHTTP: model.allowLocalHTTP, language: model.language) }
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 30)).frame(width: 42, height: 44)
@@ -301,10 +301,10 @@ struct StevoraAssistView: View {
             if assistant.busy { ProgressView().tint(Brand.cyan).frame(maxWidth: .infinity) }
         }
         .task {
-            await assistant.inspect(address: model.address, token: model.token)
+            await assistant.inspect(address: model.address, token: model.token, allowLocalHTTP: model.allowLocalHTTP)
         }
         .onChange(of: model.token) { _ in
-            Task { await assistant.inspect(address: model.address, token: model.token) }
+            Task { await assistant.inspect(address: model.address, token: model.token, allowLocalHTTP: model.allowLocalHTTP) }
         }
         .onDisappear { assistant.stopListening() }
     }

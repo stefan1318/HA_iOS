@@ -6,11 +6,20 @@ import AuthenticationServices
 @MainActor
 final class StevoraModel: ObservableObject {
     private let liveUpdates = StevoraLiveUpdates()
+    let presence = StevoraPresence()
+    @Published private(set) var accountName: String?
+    @Published private(set) var isAdmin = false
+    private var userID: String?
+    private var session = UUID()
     private let oauth = StevoraOAuth()
     @Published var isOAuthSession = false
     @Published var selectedRoom = "all"
     @Published var favorites: Set<String> = []
-    @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? ""
+    @Published var address = UserDefaults.standard.string(forKey: "stevora.address") ?? "" {
+        didSet {
+            if address != oldValue { token = ""; session = UUID() }
+        }
+    }
     @Published var allowLocalHTTP = UserDefaults.standard.bool(forKey: "stevora.allowLocalHTTP")
     @Published var token = ""
     @Published var connected = false
@@ -79,11 +88,13 @@ final class StevoraModel: ObservableObject {
         error = nil
         defer { busy = false }
         do {
+            let attempt = session
             var api = try client()
             do {
                 try await api.check()
             } catch HAError.unauthorized {
-                guard let refresh = CredentialStore.read(key: "refresh_token") else { throw HAError.unauthorized }
+                guard !persist, UserDefaults.standard.string(forKey: "stevora.address") == address,
+                      let refresh = CredentialStore.read(key: "refresh_token") else { throw HAError.unauthorized }
                 // Previously issued refresh tokens remain bound to the original client ID.
                 let clientID = UserDefaults.standard.string(forKey: "stevora.oauth.clientID") ?? "https://stevora.com"
                 let renewed = try await StevoraTokenAPI.refresh(server: api.baseURL, token: refresh, clientID: clientID)
@@ -96,9 +107,14 @@ final class StevoraModel: ObservableObject {
                 try await api.check()
             }
             let loaded = try await api.states()
+            guard attempt == session else { return }
             if persist && !CredentialStore.save(token, key: "access_token") {
                 throw NSError(domain: "STEVORA", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "Could not securely store access token"])
+            }
+            if persist {
+                CredentialStore.delete(key: "refresh_token")
+                isOAuthSession = false
             }
             UserDefaults.standard.set(address, forKey: "stevora.address")
             entities = loaded
@@ -107,26 +123,10 @@ final class StevoraModel: ObservableObject {
             connectionMode = "STEVORA OS"
             stevoraManifest = nil
             liveConnected = false
-            liveUpdates.start(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: { [weak self] entity in
-                guard let self, self.connected else { return }
-                self.liveConnected = true
-                if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
-                    self.entities[index] = entity
-                } else {
-                    self.entities.append(entity)
-                }
-            }, onReady: { [weak self] in
-                self?.liveConnected = true
-            }, onReconnect: { [weak self] in
-                self?.liveConnected = false
-                self?.connectionMode = "STEVORA OS"
-                self?.stevoraManifest = nil
-                await self?.refresh()
-            }, onManifest: { [weak self] manifest in
-                self?.receiveManifest(manifest)
-            })
+            startLiveUpdates()
         } catch {
             liveUpdates.stop()
+            clearIdentity()
             connected = false
             liveConnected = false
             connectionMode = "STEVORA OS"
@@ -135,15 +135,74 @@ final class StevoraModel: ObservableObject {
         }
     }
 
+    private func startLiveUpdates() {
+        liveUpdates.start(address: address, token: token, language: language, allowLocalHTTP: allowLocalHTTP, onChange: { [weak self] entity in
+            guard let self, self.connected else { return }
+            self.liveConnected = true
+            if let index = self.entities.firstIndex(where: { $0.id == entity.id }) {
+                self.entities[index] = entity
+            } else {
+                self.entities.append(entity)
+            }
+        }, onReady: { [weak self] in
+            self?.liveConnected = true
+            Task { await self?.refresh() }
+        }, onUser: { [weak self] user in
+            guard let self, self.connected else { return }
+            self.userID = user["id"] as? String
+            self.accountName = user["name"] as? String
+            self.isAdmin = user["is_admin"] as? Bool == true || user["is_owner"] as? Bool == true
+            self.bindPresence()
+        }, onReconnect: { [weak self] in
+            self?.liveConnected = false
+            self?.connectionMode = "STEVORA OS"
+            self?.stevoraManifest = nil
+            self?.clearIdentity()
+        }, onManifest: { [weak self] manifest in
+            self?.receiveManifest(manifest)
+        })
+    }
+
+    private func bindPresence() {
+        guard liveConnected, let manifest = stevoraManifest, let userID, !userID.isEmpty, let api = try? client() else {
+            presence.suspend()
+            return
+        }
+        presence.bind(api, installation: manifest.installationId, user: userID)
+    }
+
+    private func clearIdentity() {
+        userID = nil
+        accountName = nil
+        isAdmin = false
+        presence.suspend()
+    }
+
+    func displayName(_ entity: HAEntity) -> String {
+        stevoraManifest?.entities?.first { $0.entityId == entity.id }?.name ?? entity.name
+    }
+
+    func allows(_ entity: HAEntity, _ action: String) -> Bool {
+        guard connected && liveConnected && stevoraManifest != nil,
+              let manifest = stevoraManifest, manifest.controllable?.contains(entity.id) == true,
+              let device = manifest.entities?.first(where: { $0.entityId == entity.id }),
+              device.layout != "info", let state = entities.first(where: { $0.id == entity.id }),
+              !["unknown", "unavailable"].contains(state.state),
+              !state.id.lowercased().contains("backlight") else { return false }
+        return device.availableControls?.contains(action) == true && (device.controls?.contains(action) ?? true)
+    }
+
     func receiveManifest(_ manifest: StevoraManifest?) {
         guard let manifest, manifest.schemaVersion == "1.0", !manifest.installationId.isEmpty else {
             stevoraManifest = nil
+            presence.suspend()
             connectionMode = localized("Липсва съвместим STEVORA OS манифест", "Compatible STEVORA OS manifest unavailable")
             return
         }
         // Revisions are CRC fingerprints. Socket requests are serialized in arrival order.
         stevoraManifest = manifest
         connectionMode = "STEVORA Ecosystem"
+        bindPresence()
     }
 
     // STEVORA owns the room and entity projection when its manifest is valid.
@@ -167,12 +226,18 @@ final class StevoraModel: ObservableObject {
 
     func refresh() async {
         guard connected else { return }
-        do { entities = try await client().states(); error = nil }
+        let attempt = session
+        do {
+            let snapshot = try await client().states()
+            guard connected, attempt == session else { return }
+            entities = snapshot
+            error = nil
+        }
         catch { self.error = error.localizedDescription }
     }
 
     func toggle(_ entity: HAEntity) async {
-        guard connected && liveConnected && stevoraManifest != nil && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
+        guard allows(entity, "toggle") else { return }
         guard ["light", "switch", "fan"].contains(entity.domain) else { return }
         do {
             try await client().service(domain: entity.domain,
@@ -183,7 +248,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setTemperature(_ entity: HAEntity, value: Double) async {
-        guard connected && liveConnected && stevoraManifest != nil else { error = "Offline: controls disabled"; return }
+        guard allows(entity, "temperature") else { return }
         guard entity.domain == "climate" else { return }
         do {
             try await client().service(domain: "climate", action: "set_temperature",
@@ -193,7 +258,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setClimateMode(_ entity: HAEntity, mode: String) async {
-        guard connected && liveConnected && stevoraManifest != nil else { error = "Offline: controls disabled"; return }
+        guard allows(entity, "hvac_mode") else { return }
         guard entity.domain == "climate",
               entity.attributes.hvac_modes?.contains(mode) == true else { return }
         do {
@@ -204,7 +269,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setFanMode(_ entity: HAEntity, mode: String) async {
-        guard connected && liveConnected && stevoraManifest != nil else { error = "Offline: controls disabled"; return }
+        guard allows(entity, "fan_mode") else { return }
         guard entity.domain == "climate",
               entity.attributes.fan_modes?.contains(mode) == true else { return }
         do {
@@ -215,7 +280,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setPresetMode(_ entity: HAEntity, mode: String) async {
-        guard connected && liveConnected && stevoraManifest != nil else { error = "Offline: controls disabled"; return }
+        guard allows(entity, "preset_mode") else { return }
         guard entity.domain == "climate",
               entity.attributes.preset_modes?.contains(mode) == true else { return }
         do {
@@ -226,7 +291,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setLightEffect(_ entity: HAEntity, effect: String) async {
-        guard connected && liveConnected && stevoraManifest != nil && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
+        guard allows(entity, "effect") else { return }
         guard entity.domain == "light",
               entity.attributes.effect_list?.contains(effect) == true else { return }
         do {
@@ -237,7 +302,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setBrightness(_ entity: HAEntity, value: Double) async {
-        guard connected && liveConnected && stevoraManifest != nil && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
+        guard allows(entity, "brightness") else { return }
         guard entity.domain == "light" else { return }
         do {
             try await client().service(domain: "light", action: "turn_on",
@@ -247,7 +312,7 @@ final class StevoraModel: ObservableObject {
     }
 
     func setColor(_ entity: HAEntity, rgb: [Int]) async {
-        guard connected && liveConnected && stevoraManifest != nil && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted device"; return }
+        guard allows(entity, "color") else { return }
         guard entity.domain == "light", rgb.count == 3,
               rgb.allSatisfy({ (0...255).contains($0) }) else { return }
         do {
@@ -259,12 +324,30 @@ final class StevoraModel: ObservableObject {
 
     func runRoutine(_ entity: HAEntity) async {
         guard connected && liveConnected && stevoraManifest != nil && !entity.id.lowercased().contains("backlight") else { error = "Offline or restricted routine"; return }
-        guard ["scene", "script", "automation"].contains(entity.domain) else { return }
+        guard stevoraManifest?.controllable?.contains(entity.id) == true, projectedEntities.contains(where: { $0.id == entity.id }),
+              !["unknown", "unavailable"].contains(entity.state), ["scene", "script", "automation"].contains(entity.domain) else { return }
         do {
             let action = entity.domain == "automation" ? "trigger" : "turn_on"
             try await client().service(domain: entity.domain, action: action, entityID: entity.id)
             await refresh()
         } catch { self.error = error.localizedDescription }
+    }
+
+    func mediaOrCover(_ entity: HAEntity, action: String, volume: Double? = nil) async {
+        guard allows(entity, action) else { return }
+        let service: String
+        var fields: [String: Any] = [:]
+        switch (entity.domain, action) {
+        case ("cover", "open"), ("cover", "close"), ("cover", "stop"): service = action + "_cover"
+        case ("media_player", "play_pause"): service = "media_play_pause"
+        case ("media_player", "volume"):
+            guard let volume, (0...1).contains(volume) else { return }
+            service = "volume_set"
+            fields["volume_level"] = volume
+        default: return
+        }
+        do { try await client().service(domain: entity.domain, action: service, entityID: entity.id, extra: fields) }
+        catch { self.error = error.localizedDescription }
     }
 
     func setLocalHTTPAllowed(_ allowed: Bool) {
@@ -273,11 +356,19 @@ final class StevoraModel: ObservableObject {
     }
 
     func setLanguage(_ newValue: String) {
+        guard newValue != language else { return }
         language = newValue
         UserDefaults.standard.set(newValue, forKey: "stevora.language")
+        if connected {
+            liveConnected = false
+            stevoraManifest = nil
+            startLiveUpdates()
+        }
     }
 
     func logout() {
+        session = UUID()
+        clearIdentity()
         liveUpdates.stop()
         CredentialStore.delete(key: "access_token")
         CredentialStore.delete(key: "refresh_token")

@@ -126,13 +126,14 @@ actor StevoraAssistantGateway {
                 throw StevoraAssistantError.noMatchingPipeline(selected)
             }
             candidate = match
-        } else {
-            // No STEVORA preference: use HA's preferred pipeline only when
-            // its identity is unambiguous in the live inventory.
-            guard pipelines.count == 1, let only = pipelines.first else {
-                throw StevoraAssistantError.noMatchingPipeline("Select a default assistant in STEVORA Assistant Manager")
-            }
+        } else if resolved["source"] as? String == "home_assistant_default",
+                  let preferred = list["preferred_pipeline"] as? String,
+                  let match = pipelines.first(where: { $0["id"] as? String == preferred }) {
+            candidate = match
+        } else if resolved["source"] as? String == "home_assistant_default", pipelines.count == 1, let only = pipelines.first {
             candidate = only
+        } else {
+            throw StevoraAssistantError.noMatchingPipeline("STEVORA")
         }
         guard let id = candidate["id"] as? String else {
             throw StevoraAssistantError.invalidResponse

@@ -86,9 +86,9 @@ private struct StevoraOnboarding: View {
                     Text(model.localized("Твоят дом. Твоят интелект.", "Your home. Your intelligence."))
                         .font(.headline).foregroundStyle(Brand.cyan)
                     VStack(alignment: .leading, spacing: 15) {
-                        TextField("https://your-home-hub.example", text: $model.address)
+                        TextField(model.localized("Адрес на STEVORA OS", "STEVORA OS address"), text: $model.address)
                             .textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
-                            .textContentType(.URL)
+                            .textContentType(.URL).disabled(model.busy)
                         DisclosureGroup(model.localized("Разширени настройки: тестов токен", "Advanced: test token"), isExpanded: $showToken) {
                             SecureField(model.localized("Токен за достъп", "Access token"), text: $model.token)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -143,7 +143,7 @@ private enum StevoraTab: String, CaseIterable {
         case .rooms: "square.grid.2x2.fill"
         case .climate: "thermometer.medium"
         case .assistant: "waveform.circle.fill"
-        case .more: "ellipsis.circle.fill"
+        case .more: "gearshape.fill"
         }
     }
     @MainActor
@@ -153,13 +153,13 @@ private enum StevoraTab: String, CaseIterable {
         case .rooms: model.localized("Помещения", "Rooms")
         case .climate: model.localized("Климат", "Climate")
         case .assistant: "STEVORA AI"
-        case .more: model.localized("Още", "More")
+        case .more: model.localized("Настройки", "Settings")
         }
     }
 }
 
 // Capability-based device discovery. Never assume the test home's entity IDs or room names.
-private let controllableDomains: Set<String> = ["light", "switch", "fan", "climate", "media_player", "cover", "lock"]
+private let controllableDomains: Set<String> = ["light", "switch", "fan", "climate", "media_player", "cover", "lock", "sensor", "binary_sensor"]
 
 private struct StevoraDashboard: View {
     @EnvironmentObject private var model: StevoraModel
@@ -200,12 +200,12 @@ private struct StevoraDashboard: View {
             $0.attributes.device_class == "humidity" &&
             Double($0.state) != nil }
     }
-    private var homepodTemperature: String {
+    private var roomTemperature: String {
         temperatureSensor?.state ?? model.projectedEntities.first(where: {
             $0.domain == "climate" && $0.attributes.current_temperature != nil
         }).flatMap { $0.attributes.current_temperature.map { String(format: "%.1f", $0) } } ?? "—"
     }
-    private var homepodHumidity: String { humiditySensor?.state ?? "—" }
+    private var roomHumidity: String { humiditySensor?.state ?? "—" }
 
     var body: some View {
         TabView(selection: $selected) {
@@ -258,9 +258,11 @@ private struct StevoraDashboard: View {
                 Text("STEVORA")
                     .font(.system(size: 26, weight: .black, design: .rounded))
                     .tracking(3).foregroundStyle(Brand.light)
-                Label(model.localized("Системата е свързана", "Home Hub connected"),
-                      systemImage: "checkmark.circle.fill")
-                    .font(.caption).foregroundStyle(Brand.mint)
+                Label(model.liveConnected && model.stevoraManifest != nil
+                      ? model.localized("Свързан със STEVORA OS", "Connected to STEVORA OS")
+                      : model.localized("Изчаква синхронизация", "Waiting for sync"),
+                      systemImage: model.liveConnected && model.stevoraManifest != nil ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                    .font(.caption).foregroundStyle(model.liveConnected && model.stevoraManifest != nil ? Brand.mint : Brand.muted)
             }
             Spacer()
         }.padding(.vertical, 7)
@@ -294,7 +296,7 @@ private struct StevoraDashboard: View {
             section(model.localized("ИЗБРАНИ УСТРОЙСТВА", "FAVORITE DEVICES"),
                     subtitle: model.localized("Твоите избрани контроли", "Your selected controls"))
             ForEach(controls.filter { model.favorites.contains($0.id) }) { entity in
-                StevoraDeviceCard(entity: entity, name: entity.name)
+                StevoraDeviceCard(entity: entity, name: model.displayName(entity))
             }
         }
     }
@@ -303,7 +305,7 @@ private struct StevoraDashboard: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("CLIMATE CENTER").font(.headline)
+                    Text(model.localized("КЛИМАТИЧЕН ЦЕНТЪР", "CLIMATE CENTER")).font(.headline)
                     Text(model.localized("Данни от наличните датчици", "Available sensor readings"))
                         .font(.caption).foregroundStyle(Brand.muted)
                 }
@@ -322,10 +324,10 @@ private struct StevoraDashboard: View {
                         .rotationEffect(.degrees(135))
                         .animation(.spring(response: 0.8, dampingFraction: 0.7), value: gaugeProgress)
                     VStack(spacing: 1) {
-                        Text(homepodTemperature == "—" ? "—" : homepodTemperature + "°")
+                        Text(roomTemperature == "—" ? "—" : roomTemperature + "°")
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
                             .contentTransition(.numericText())
-                        Text("ROOM TEMP").font(.system(size: 9, weight: .semibold))
+                        Text(model.localized("ТЕМПЕРАТУРА", "ROOM TEMP")).font(.system(size: 9, weight: .semibold))
                             .tracking(1).foregroundStyle(Brand.muted)
                     }
                 }
@@ -335,7 +337,7 @@ private struct StevoraDashboard: View {
                         Image(systemName: "humidity.fill").foregroundStyle(Brand.cyan)
                         VStack(alignment: .leading) {
                             Text(model.localized("Влажност", "Humidity")).font(.caption).foregroundStyle(Brand.muted)
-                            Text(homepodHumidity == "—" ? "—" : homepodHumidity + "%").font(.title3.bold())
+                            Text(roomHumidity == "—" ? "—" : roomHumidity + "%").font(.title3.bold())
                         }
                     }
                     HStack {
@@ -361,7 +363,7 @@ private struct StevoraDashboard: View {
         .modifier(StevoraGlassCard())
     }
     private var gaugeProgress: CGFloat {
-        guard let value = Double(homepodTemperature) else { return 0 }
+        guard let value = Double(roomTemperature) else { return 0 }
         return CGFloat(max(0, min(1, (value - 10) / 25)))
     }
     private func metric(_ label: String, value: String, symbol: String) -> some View {
@@ -412,7 +414,7 @@ private struct StevoraDashboard: View {
                     ? model.projectedEntities(in: selectedRoom).contains(where: { $0.id == entity.id })
                     : entity.domain == selectedRoom)
             }) { entity in
-                StevoraDeviceCard(entity: entity, name: entity.name)
+                StevoraDeviceCard(entity: entity, name: model.displayName(entity))
             }
             if controls.isEmpty {
                 Text(model.stevoraManifest != nil
@@ -425,16 +427,16 @@ private struct StevoraDashboard: View {
 
     private var climate: some View {
         VStack(alignment: .leading, spacing: 17) {
-            section("CLIMATE CENTER", subtitle: model.localized("Мониторинг и управление", "Monitor and control"))
+            section(model.localized("КЛИМАТИЧЕН ЦЕНТЪР", "CLIMATE CENTER"), subtitle: model.localized("Мониторинг и управление", "Monitor and control"))
             climateCenter
             HStack(spacing: 12) {
                 metric(model.localized("ТЕМПЕРАТУРА", "TEMPERATURE"),
-                       value: homepodTemperature == "—" ? "—" : homepodTemperature + "°C", symbol: "thermometer.medium")
+                       value: roomTemperature == "—" ? "—" : roomTemperature + (temperatureSensor?.attributes.unit_of_measurement ?? "°"), symbol: "thermometer.medium")
                 metric(model.localized("ВЛАЖНОСТ", "HUMIDITY"),
-                       value: homepodHumidity == "—" ? "—" : homepodHumidity + "%", symbol: "humidity.fill")
+                       value: roomHumidity == "—" ? "—" : roomHumidity + "%", symbol: "humidity.fill")
             }
             ForEach(controls.filter { $0.domain == "climate" }) { device in
-                StevoraDeviceCard(entity: device, name: device.name)
+                StevoraDeviceCard(entity: device, name: model.displayName(device))
             }
         }
     }
@@ -452,7 +454,7 @@ private struct StevoraDashboard: View {
                 }) { entity in
                     HStack(spacing: 9) {
                         Image(systemName: "play.square.stack.fill").foregroundStyle(Brand.cyan)
-                        Text(entity.name).lineLimit(2)
+                        Text(model.displayName(entity)).lineLimit(2)
                         Spacer()
                         Button {
                             Task { await model.runRoutine(entity) }
@@ -463,7 +465,12 @@ private struct StevoraDashboard: View {
                     .padding(.vertical, 6)
                 }
             }.padding(19).modifier(StevoraGlassCard())
-            StevoraManagersView(model: model)
+            if model.isAdmin && model.liveConnected && model.stevoraManifest != nil {
+                DisclosureGroup(model.localized("Стаи, устройства и асистенти", "Rooms, devices and assistants")) {
+                    StevoraManagersView(model: model)
+                }.padding(19).modifier(StevoraGlassCard())
+            }
+            StevoraPresenceSettings(presence: model.presence)
             VStack(alignment: .leading, spacing: 15) {
                 Text(model.localized("Език", "Language")).font(.headline)
                 Picker("Language", selection: Binding(
@@ -473,6 +480,15 @@ private struct StevoraDashboard: View {
                     Text("Български").tag("bg")
                     Text("English").tag("en")
                 }.pickerStyle(.segmented)
+                if let name = model.accountName {
+                    LabeledContent(model.localized("Профил", "Account"), value: name)
+                }
+                if let manifest = model.stevoraManifest {
+                    LabeledContent(model.localized("Ревизия на дома", "Home revision"), value: String(manifest.revision))
+                }
+                if let url = URL(string: model.address), model.stevoraManifest != nil {
+                    Link(model.localized("Отвори STEVORA OS", "Open STEVORA OS"), destination: url)
+                }
                 Text(model.address).font(.caption).foregroundStyle(Brand.muted)
                 Text(model.connectionMode).font(.caption).foregroundStyle(Brand.muted)
                 Button(role: .destructive) { model.logout() } label: {
@@ -518,7 +534,7 @@ private struct StevoraDeviceCard: View {
                         .foregroundStyle(Brand.cyan)
                 }
                 .accessibilityLabel("Favorite")
-                if ["light", "fan", "switch"].contains(entity.domain) {
+                if model.allows(entity, "toggle") {
                     Button {
                         Task { await model.toggle(entity) }
                     } label: {
@@ -527,9 +543,9 @@ private struct StevoraDeviceCard: View {
                     }.accessibilityLabel(entity.state == "on" ? "Turn off" : "Turn on")
                 }
             }
-            if entity.domain == "climate", let target = entity.attributes.temperature {
+            if model.allows(entity, "temperature"), let target = entity.attributes.temperature {
                 HStack(spacing: 14) {
-                    Text(model.localized("Зададена", "Target") + ": \(Int(target))°C")
+                    Text(model.localized("Зададена", "Target") + ": \(Int(target))°")
                         .font(.subheadline)
                     Spacer()
                     Button { Task { await model.setTemperature(entity, value: max(entity.attributes.min_temp ?? 7, target - 1)) } } label: {
@@ -540,8 +556,9 @@ private struct StevoraDeviceCard: View {
                     }
                 }.foregroundStyle(Brand.cyan)
             }
+            StevoraMediaCoverControls(entity: entity)
             if entity.domain == "climate" {
-                if let modes = entity.attributes.hvac_modes, !modes.isEmpty {
+                if model.allows(entity, "hvac_mode"), let modes = entity.attributes.hvac_modes, !modes.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -562,7 +579,7 @@ private struct StevoraDeviceCard: View {
                         }
                     }
                 }
-                if let modes = entity.attributes.fan_modes, !modes.isEmpty {
+                if model.allows(entity, "fan_mode"), let modes = entity.attributes.fan_modes, !modes.isEmpty {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(model.localized("Вентилатор", "Fan speed")).font(.caption).foregroundStyle(Brand.muted)
                         Picker("Fan", selection: Binding(
@@ -573,7 +590,7 @@ private struct StevoraDeviceCard: View {
                         }.pickerStyle(.menu)
                     }
                 }
-                if let presets = entity.attributes.preset_modes, !presets.isEmpty {
+                if model.allows(entity, "preset_mode"), let presets = entity.attributes.preset_modes, !presets.isEmpty {
                     Picker("Preset", selection: Binding(
                         get: { entity.attributes.preset_mode ?? presets[0] },
                         set: { value in Task { await model.setPresetMode(entity, mode: value) } }
@@ -582,7 +599,7 @@ private struct StevoraDeviceCard: View {
                     }.pickerStyle(.menu)
                 }
             }
-            if entity.domain == "light" {
+            if entity.domain == "light" && ["brightness", "color", "effect"].contains(where: { model.allows(entity, $0) }) {
                 Button {
                     withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) { expanded.toggle() }
                 } label: {
@@ -593,6 +610,7 @@ private struct StevoraDeviceCard: View {
                     }.font(.caption).foregroundStyle(Brand.muted)
                 }.buttonStyle(StevoraTouchStyle())
                 if expanded {
+                    if model.allows(entity, "brightness") {
                     HStack(spacing: 10) {
                         Image(systemName: "sun.min").foregroundStyle(Brand.cyan)
                         Slider(value: $brightness, in: 1...100, step: 1) { editing in
@@ -600,7 +618,8 @@ private struct StevoraDeviceCard: View {
                         }
                         Image(systemName: "sun.max").foregroundStyle(Brand.cyan)
                     }
-                    if entity.attributes.supported_color_modes?.contains(where: {
+                    }
+                    if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: {
                         ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0)
                     }) == true {
                         VStack(alignment: .leading, spacing: 8) {
@@ -622,7 +641,7 @@ private struct StevoraDeviceCard: View {
                             }.buttonStyle(.borderedProminent)
                         }
                     }
-                    if let effects = entity.attributes.effect_list, !effects.isEmpty {
+                    if model.allows(entity, "effect"), let effects = entity.attributes.effect_list, !effects.isEmpty {
                         Picker("Effect", selection: Binding(
                             get: { entity.attributes.effect ?? effects[0] },
                             set: { value in Task { await model.setLightEffect(entity, effect: value) } }
@@ -630,7 +649,7 @@ private struct StevoraDeviceCard: View {
                             ForEach(effects, id: \.self) { Text($0).tag($0) }
                         }.pickerStyle(.menu)
                     }
-                    if entity.attributes.supported_color_modes?.contains(where: { ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0) }) == true {
+                    if model.allows(entity, "color"), entity.attributes.supported_color_modes?.contains(where: { ["rgb", "rgbw", "rgbww", "hs", "xy"].contains($0) }) == true {
                         HStack(spacing: 13) {
                             colorDot(.red, rgb: [255, 0, 0])
                             colorDot(.pink, rgb: [255, 25, 130])
@@ -644,6 +663,7 @@ private struct StevoraDeviceCard: View {
         .padding(19)
         .modifier(StevoraGlassCard())
         .onAppear { updateBrightness(); updateRGB() }
+        .onChange(of: entity.attributes.rgb_color) { _ in updateRGB() }
         .onChange(of: entity.attributes.brightness) { _ in updateBrightness() }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: expanded)
     }

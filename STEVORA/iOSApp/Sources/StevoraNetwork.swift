@@ -1,5 +1,7 @@
 import Foundation
 import Security
+import CoreLocation
+import UIKit
 
 struct HAEntity: Decodable, Identifiable {
     struct Attributes: Decodable {
@@ -18,6 +20,7 @@ struct HAEntity: Decodable, Identifiable {
         let min_temp: Double?
         let max_temp: Double?
         let supported_color_modes: [String]?
+        let volume_level: Double?
         let color_mode: String?
         let effect_list: [String]?
         let effect: String?
@@ -31,9 +34,10 @@ struct HAEntity: Decodable, Identifiable {
 }
 
 enum HAError: LocalizedError {
-    case invalidURL, unauthorized, unexpectedResponse, insecureConnection
+    case invalidURL, unauthorized, unexpectedResponse, insecureConnection, registrationExpired
     var errorDescription: String? {
         switch self {
+        case .registrationExpired: "Mobile App registration expired"
         case .invalidURL: "Invalid server URL"
         case .unauthorized: "Authentication failed (401)"
         case .unexpectedResponse: "Server returned an unexpected response"
@@ -108,7 +112,7 @@ struct HAClient {
         self.token = token
     }
 
-    private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+    private func request(_ path: String, method: String = "GET", body: Data? = nil, authenticated: Bool = true) async throws -> Data {
         guard path.hasPrefix("/api/"), !path.hasPrefix("//"),
               let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
               url.scheme == baseURL.scheme,
@@ -117,27 +121,47 @@ struct HAClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 20
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if authenticated { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await StevoraNoRedirect.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw HAError.unexpectedResponse }
+        if http.statusCode == 410 && !authenticated { throw HAError.registrationExpired }
         if http.statusCode == 401 { throw HAError.unauthorized }
         guard (200...299).contains(http.statusCode) else { throw HAError.unexpectedResponse }
         return data
     }
 
-    func conversation(text: String, conversationID: String?) async throws -> (String, String?) {
-        var body: [String: Any] = ["text": text, "language": "bg"]
-        if let conversationID { body["conversation_id"] = conversationID }
-        let encoded = try JSONSerialization.data(withJSONObject: body)
-        let data = try await request("/api/conversation/process", method: "POST", body: encoded)
+    @MainActor
+    func registerPresence(deviceID: String) async throws -> String {
+        let device = UIDevice.current
+        let fields = ["app_id": Bundle.main.bundleIdentifier ?? "com.stevora.companion.ios",
+                      "app_name": "STEVORA", "device_id": deviceID, "device_name": "STEVORA " + device.model,
+                      "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1",
+                      "manufacturer": "Apple", "model": device.model, "os_name": device.systemName, "os_version": device.systemVersion]
+        let data = try await request("/api/mobile_app/registrations", method: "POST",
+                                     body: JSONEncoder().encode(fields))
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let response = result["response"] as? [String: Any],
-              let speech = response["speech"] as? [String: Any],
-              let plain = speech["plain"] as? [String: Any],
-              let answer = plain["speech"] as? String else { throw HAError.unexpectedResponse }
-        return (answer, result["conversation_id"] as? String)
+              let webhook = result["webhook_id"] as? String, validWebhook(webhook) else { throw HAError.unexpectedResponse }
+        return webhook
+    }
+
+    private func validWebhook(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.count <= 256 && value.utf8.allSatisfy {
+            (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95
+        }
+    }
+
+    func sendPresence(_ fix: CLLocation, webhook: String) async throws {
+        guard validWebhook(webhook) else { throw HAError.unexpectedResponse }
+        let location: [String: Any] = ["gps": [fix.coordinate.latitude, fix.coordinate.longitude],
+                                       "gps_accuracy": Int(fix.horizontalAccuracy.rounded(.up))]
+        let body = try JSONSerialization.data(withJSONObject: ["type": "update_location", "data": location])
+        let data = try await request("/api/webhook/" + webhook, method: "POST", body: body, authenticated: false)
+        if !data.isEmpty {
+            guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  reply["success"] as? Bool != false else { throw HAError.unexpectedResponse }
+        }
     }
 
     func check() async throws {

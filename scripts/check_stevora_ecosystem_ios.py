@@ -31,7 +31,7 @@ checks = {
     "dynamic device discovery": "controllableDomains.contains($0.domain)" in views,
     "no hard-coded developer device IDs": "climate.air_conditioner" not in views and "light.rgb_cct" not in views,
     "no backlight control": 'contains("backlight")' in model and 'contains("backlight")' in views,
-    "offline command gate": model.count("connected && liveConnected") >= 8,
+    "offline command gate": "guard connected && liveConnected && stevoraManifest != nil" in model and model.count("guard allows(entity,") >= 8 and "manifest.controllable?.contains(entity.id) == true" in model and "device.availableControls?.contains(action) == true" in model,
     "WebSocket ready after subscription": "onReady()" in live and "subscribed = true" in live,
     "role-based Assist routing": "auth/current_user" in assist and "routeChanged" in assist,
     "BG/EN UI": "func localized(" in model and "Български" in views and "English" in views,

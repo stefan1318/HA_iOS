@@ -31,6 +31,11 @@ targets:
     info:
       path: Generated/StevoraInfo.plist
       properties:
+        NSLocationWhenInUseUsageDescription: "Share this device’s location with the STEVORA home you select."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Update presence in your selected home when the app is in the background."
+        NSLocalNetworkUsageDescription: "Connect to your STEVORA OS home on the local network."
+        UIBackgroundModes:
+          - location
         CFBundleURLTypes:
           - CFBundleURLSchemes:
               - com.stevora

@@ -95,7 +95,7 @@ enum StevoraTokenAPI {
         var form = URLComponents()
         form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
         request.httpBody = form.percentEncodedQuery?.data(using: .utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await StevoraNoRedirect.session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw HAError.unauthorized
         }
