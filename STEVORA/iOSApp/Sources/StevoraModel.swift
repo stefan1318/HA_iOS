@@ -205,6 +205,8 @@ final class StevoraModel: ObservableObject {
         presence.suspend()
     }
 
+    var canManageHome: Bool { isAdmin && connected && liveConnected && stevoraManifest != nil }
+
     func displayName(_ entity: HAEntity) -> String {
         stevoraManifest?.entities?.first { $0.entityId == entity.id }?.name ?? entity.name
     }

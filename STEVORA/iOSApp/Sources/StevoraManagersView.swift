@@ -3,6 +3,32 @@ import SwiftUI
 /// Live, server-authorized manager. No local admin flag grants access.
 struct StevoraManagersView: View {
     @ObservedObject var model: StevoraModel
+    enum Page: CaseIterable {
+        case rooms, devices, assistants
+
+        @MainActor func title(_ model: StevoraModel) -> String {
+            switch self {
+            case .rooms: return model.localized("Стаи", "Rooms")
+            case .devices: return model.localized("Устройства", "Devices")
+            case .assistants: return model.localized("Асистенти", "Assistants")
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .rooms: return "square.grid.2x2"
+            case .devices: return "switch.2"
+            case .assistants: return "waveform"
+            }
+        }
+    }
+
+    let page: Page
+    @State private var roster: [StevoraAdminAPI.AssistantUser]?
+    @State private var selectedRoom: String?
+    @State private var selectedEntity: String?
+    @State private var selectedUser: String?
+    @State private var saving = false
     @State private var rooms: StevoraAdminAPI.RoomSnapshot?
     @State private var assistants: StevoraAdminAPI.AssistantSnapshot?
     @State private var selectedDefault = ""
@@ -22,33 +48,59 @@ struct StevoraManagersView: View {
     }
 
     private func load() async {
-        guard !model.token.isEmpty else { return }
+        guard model.canManageHome, !model.token.isEmpty else {
+            rooms = nil
+            assistants = nil
+            return
+        }
         loading = true
         defer { loading = false }
         do {
             let service = gateway()
-            let roomResult = try await service.adminRequest("stevora/admin/rooms/get")
-            let assistantResult = try await service.adminRequest("stevora/admin/assistants/get")
-            let roomData = try JSONSerialization.data(withJSONObject: roomResult)
-            let assistantData = try JSONSerialization.data(withJSONObject: assistantResult)
-            rooms = try JSONDecoder().decode(StevoraAdminAPI.RoomSnapshot.self, from: roomData)
-            roomAliases = rooms?.roomAliases ?? [:]
-            entityAliases = rooms?.entityAliases ?? [:]
-            roomOrder = rooms?.roomOrder ?? []
-            bilingualRooms = rooms?.translations?.rooms ?? [:]
-            bilingualEntities = rooms?.translations?.entities ?? [:]
-            deviceProfiles = rooms?.deviceProfiles ?? [:]
-            assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: assistantData)
-            selectedDefault = assistants?.settings.defaultPipeline ?? ""
-            userPipelines = assistants?.settings.userPipelines ?? [:]
+            switch page {
+            case .assistants:
+                let result = try await service.adminRequest("stevora/admin/assistants/get")
+                try Task.checkCancellation()
+                assistants = try JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self,
+                    from: JSONSerialization.data(withJSONObject: result))
+                selectedDefault = assistants?.settings.defaultPipeline ?? ""
+                userPipelines = assistants?.settings.userPipelines ?? [:]
+            case .rooms, .devices:
+                let result = try await service.adminRequest("stevora/admin/rooms/get")
+                try Task.checkCancellation()
+                rooms = try JSONDecoder().decode(StevoraAdminAPI.RoomSnapshot.self,
+                    from: JSONSerialization.data(withJSONObject: result))
+                roomAliases = rooms?.roomAliases ?? [:]
+                entityAliases = rooms?.entityAliases ?? [:]
+                let known = rooms?.rooms.map(\.id) ?? []
+                let saved = (rooms?.roomOrder ?? []).filter { known.contains($0) }
+                roomOrder = saved + known.filter { !saved.contains($0) }
+                bilingualRooms = rooms?.translations?.rooms ?? [:]
+                bilingualEntities = rooms?.translations?.entities ?? [:]
+                deviceProfiles = rooms?.deviceProfiles ?? [:]
+                if page == .devices {
+                    roster = nil
+                    if let result = try? await service.adminRequest("stevora/admin/assistants/get"),
+                       let data = try? JSONSerialization.data(withJSONObject: result) {
+                        roster = try? JSONDecoder().decode(StevoraAdminAPI.AssistantSnapshot.self, from: data).users
+                    }
+                    try Task.checkCancellation()
+                }
+            }
             errorMessage = nil
+        } catch is CancellationError {
+            return
         } catch {
+            rooms = nil
+            assistants = nil
             errorMessage = error.localizedDescription
         }
     }
 
     private func setVisibility(_ entityID: String, _ visibility: String) async {
-        guard let rooms else { return }
+        guard model.canManageHome, !saving, let rooms else { return }
+        saving = true
+        defer { saving = false }
         do {
             _ = try await gateway().adminRequest("stevora/admin/rooms/update", fields: [
                 "expected_revision": rooms.revision,
@@ -61,14 +113,17 @@ struct StevoraManagersView: View {
         }
     }
 
-    private func saveRoomLayout() async {
-        guard let rooms else { return }
+    private func saveRoomLayout(_ id: String) async {
+        guard model.canManageHome, !saving, let rooms else { return }
+        saving = true
+        defer { saving = false }
         do {
             _ = try await gateway().adminRequest("stevora/admin/rooms/aliases/update", fields: [
                 "expected_revision": rooms.revision,
-                "room_aliases": roomAliases,
+                "room_aliases": rooms.roomAliases.merging(roomAliases.filter { $0.key == id }) { _, new in new },
                 "entity_aliases": entityAliases,
-                "room_order": roomOrder
+                "room_order": roomOrder,
+                "room_labels": [id: ["bg": bilingualRooms[id]?["bg"] ?? "", "en": bilingualRooms[id]?["en"] ?? ""]]
             ])
             statusMessage = model.localized("Стаите са запазени", "Room layout saved")
             await load()
@@ -78,14 +133,14 @@ struct StevoraManagersView: View {
         }
     }
 
-    private func saveTranslations(roomID: String? = nil, entityID: String? = nil) async {
-        guard let rooms else { return }
+    private func saveTranslations(entityID: String) async {
+        guard model.canManageHome, !saving, let rooms else { return }
+        saving = true
+        defer { saving = false }
         do {
-            let selectedRooms = roomID.map { [$0: bilingualRooms[$0] ?? [:]] } ?? [:]
-            let selectedEntities = entityID.map { [$0: bilingualEntities[$0] ?? [:]] } ?? [:]
             _ = try await gateway().adminRequest("stevora/admin/translations/update", fields: [
                 "expected_revision": rooms.revision,
-                "rooms": selectedRooms, "entities": selectedEntities
+                "rooms": [String: Any](), "entities": [entityID: ["bg": bilingualEntities[entityID]?["bg"] ?? "", "en": bilingualEntities[entityID]?["en"] ?? ""]]
             ])
             statusMessage = model.localized("Преводите са запазени", "Translations saved")
             await load()
@@ -94,7 +149,9 @@ struct StevoraManagersView: View {
     }
 
     private func saveDevice(_ entityID: String) async {
-        guard let rooms, let profile = deviceProfiles[entityID] else { return }
+        guard model.canManageHome, !saving, let rooms, let profile = deviceProfiles[entityID] else { return }
+        saving = true
+        defer { saving = false }
         do {
             let encoded = try JSONEncoder().encode(profile)
             let value = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] ?? [:]
@@ -111,7 +168,9 @@ struct StevoraManagersView: View {
     }
 
     private func saveAssistant() async {
-        guard let assistants else { return }
+        guard model.canManageHome, !saving, let assistants else { return }
+        saving = true
+        defer { saving = false }
         do {
             _ = try await gateway().adminRequest("stevora/admin/assistants/update", fields: [
                 "expected_revision": assistants.revision,
@@ -125,164 +184,172 @@ struct StevoraManagersView: View {
         }
     }
 
+    private func roomName(_ room: StevoraAdminAPI.RoomSnapshot.Room) -> String {
+        let translated = rooms?.translations?.rooms[room.id]?[model.language] ?? ""
+        if !translated.isEmpty { return translated }
+        return rooms?.roomAliases[room.id] ?? room.name
+    }
+
+    private func deviceChoices(_ snapshot: StevoraAdminAPI.RoomSnapshot) -> [StevoraSettingsPicker.Choice] {
+        let areas = Dictionary(snapshot.rooms.map { ($0.id, roomName($0)) }, uniquingKeysWith: { first, _ in first })
+        return snapshot.entities.map { entity in
+            let names = [snapshot.translations?.entities[entity.id]?[model.language],
+                         snapshot.deviceProfiles[entity.id]?.name, snapshot.entityAliases[entity.id], entity.name]
+            let label = names.compactMap { $0 }.first { !$0.isEmpty } ?? entity.id
+            let detail = [entity.areaID.flatMap { areas[$0] }, entity.name == label ? nil : entity.name, entity.id]
+                .compactMap { $0 }.joined(separator: " · ")
+            return .init(id: entity.id, name: label, detail: detail)
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(model.localized("STEVORA МЕНИДЖЪРИ", "STEVORA MANAGERS"))
-                .font(.headline)
-            if loading { ProgressView() }
-            if let errorMessage {
-                Text(errorMessage).font(.footnote).foregroundStyle(.orange)
-            }
-            if let statusMessage {
-                Text(statusMessage).font(.footnote).foregroundStyle(.green)
-            }
-            if let assistants {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(model.localized("Assistant Manager", "Assistant Manager"))
-                        .font(.headline)
-                    Picker(model.localized("Основен асистент", "Default assistant"), selection: $selectedDefault) {
-                        Text(model.localized("Без избор", "No selection")).tag("")
-                        ForEach(assistants.pipelines, id: \.id) { pipeline in
-                            Text(pipeline.name).tag(pipeline.id)
-                        }
-                    }
-                    ForEach(assistants.users) { user in
-                        Picker(user.name, selection: Binding(
-                            get: { userPipelines[user.id] ?? "" },
-                            set: { next in
-                                if next.isEmpty { userPipelines.removeValue(forKey: user.id) }
-                                else { userPipelines[user.id] = next }
-                            }
-                        )) {
-                            Text(model.localized("Наследи основния", "Use default")).tag("")
-                            ForEach(assistants.pipelines, id: \.id) { pipeline in
-                                Text(pipeline.name).tag(pipeline.id)
-                            }
-                        }
-                    }
-                    Button(model.localized("Запази асистента", "Save assistant")) {
-                        Task { await saveAssistant() }
-                    }
-                    .disabled(loading)
+        Form {
+            if model.canManageHome {
+                if loading || saving { ProgressView() }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.orange) }
+                if let statusMessage { Text(statusMessage).foregroundStyle(Brand.mint) }
+                switch page {
+                case .rooms:
+                    if let rooms { roomEditor(rooms) }
+                case .devices:
+                    if let rooms { deviceEditor(rooms) }
+                case .assistants:
+                    if let assistants { assistantEditor(assistants) }
                 }
-            }
-            if let rooms {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(model.localized("Device & Room Manager", "Device & Room Manager"))
-                        .font(.headline)
-                    ForEach(rooms.rooms) { room in
-                        HStack {
-                            TextField(room.name, text: Binding(
-                                get: { roomAliases[room.id] ?? room.name },
-                                set: { roomAliases[room.id] = $0 }
-                            ))
-                            Button("↑") {
-                                if !roomOrder.contains(room.id) { roomOrder = rooms.rooms.map(\.id) }
-                                if let index = roomOrder.firstIndex(of: room.id), index > 0 {
-                                    roomOrder.swapAt(index, index - 1)
-                                }
-                            }
-                        }
-                    }
-                    ForEach(rooms.rooms) { room in
-                        DisclosureGroup(room.name + " · BG/EN") {
-                            ForEach(["bg", "en"], id: \.self) { locale in
-                                TextField(locale.uppercased(), text: Binding(
-                                    get: { bilingualRooms[room.id]?[locale] ?? "" },
-                                    set: { bilingualRooms[room.id, default: [:]][locale] = $0 }
-                                ))
-                            }
-                            Button("Save BG/EN") { Task { await saveTranslations(roomID: room.id) } }
-                        }
-                    }
-                    Button(model.localized("Запази стаите", "Save rooms")) {
-                        Task { await saveRoomLayout() }
-                    }
-                    Text("\(rooms.entities.count) entities")
-                        .font(.caption).foregroundStyle(.secondary)
-                    ForEach(rooms.entities) { entity in
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading) {
-                                Text(entity.name).font(.subheadline)
-                                Text(entity.entityId).font(.caption2).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if entity.disabled || entity.hidden {
-                                Image(systemName: "lock.fill")
-                            } else {
-                                Menu {
-                                    Button(model.localized("Автоматично", "Automatic")) {
-                                        Task { await setVisibility(entity.entityId, "default") }
-                                    }
-                                    Button(model.localized("Включи", "Include")) {
-                                        Task { await setVisibility(entity.entityId, "include") }
-                                    }
-                                    Button(model.localized("Изключи", "Exclude")) {
-                                        Task { await setVisibility(entity.entityId, "exclude") }
-                                    }
-                                } label: {
-                                    Image(systemName: entity.included ? "eye" : "eye.slash")
-                                }
-                            }
-                        }
-                        DisclosureGroup("BG / EN") {
-                            ForEach(["bg", "en"], id: \.self) { locale in
-                                TextField(locale.uppercased(), text: Binding(
-                                    get: { bilingualEntities[entity.entityId]?[locale] ?? "" },
-                                    set: { bilingualEntities[entity.entityId, default: [:]][locale] = $0 }
-                                ))
-                            }
-                            Button("Save BG/EN") { Task { await saveTranslations(entityID: entity.entityId) } }
-                        }
-                        DisclosureGroup(model.localized("Персонализиране", "Customize")) {
-                            TextField(model.localized("Име", "Name"), text: Binding(
-                                get: { deviceProfiles[entity.entityId]?.name ?? "" },
-                                set: { deviceProfiles[entity.entityId, default: .empty].name = $0 }
-                            ))
-                            TextField("mdi:icon", text: Binding(
-                                get: { deviceProfiles[entity.entityId]?.icon ?? "" },
-                                set: { deviceProfiles[entity.entityId, default: .empty].icon = $0 }
-                            ))
-                            Picker(model.localized("Изглед", "Layout"), selection: Binding(
-                                get: { deviceProfiles[entity.entityId]?.layout ?? "compact" },
-                                set: { deviceProfiles[entity.entityId, default: .empty].layout = $0 }
-                            )) {
-                                Text("Info").tag("info")
-                                Text("Compact").tag("compact")
-                                Text("Expanded").tag("expanded")
-                            }
-                            Picker(model.localized("Стая", "Room"), selection: Binding(
-                                get: { deviceProfiles[entity.entityId]?.areaId ?? "" },
-                                set: { deviceProfiles[entity.entityId, default: .empty].areaId = $0.isEmpty ? nil : $0 }
-                            )) {
-                                Text(model.localized("Автоматично", "Automatic")).tag("")
-                                ForEach(rooms.rooms) { room in Text(room.name).tag(room.id) }
-                            }
-                            Toggle(model.localized("Автоматични контроли", "Automatic controls"), isOn: Binding(
-                                get: { deviceProfiles[entity.entityId]?.controls == nil },
-                                set: { automatic in deviceProfiles[entity.entityId, default: .empty].controls = automatic ? nil : [] }
-                            ))
-                            if deviceProfiles[entity.entityId]?.controls != nil {
-                            TextField(model.localized("Контроли (разделени със запетая)", "Controls (comma-separated)"), text: Binding(
-                                get: { (deviceProfiles[entity.entityId]?.controls ?? []).joined(separator: ",") },
-                                set: { deviceProfiles[entity.entityId, default: .empty].controls = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
-                            ))
-                            }
-                            TextField(model.localized("Потребителски ID (със запетая)", "User IDs (comma-separated)"), text: Binding(
-                                get: { (deviceProfiles[entity.entityId]?.userIds ?? []).joined(separator: ",") },
-                                set: { deviceProfiles[entity.entityId, default: .empty].userIds = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
-                            ))
-                            Button(model.localized("Запази устройството", "Save device")) {
-                                Task { await saveDevice(entity.entityId) }
-                            }
-                        }
-                    }
-                }
-            }
-            Button(model.localized("Обнови мениджърите", "Refresh managers")) {
-                Task { await load() }
+                Button(model.localized("Обнови", "Refresh")) { Task { await load() } }
+            } else {
+                Text(model.localized("Нужен е администраторски достъп до свързания дом.",
+                                     "Administrator access to the connected home is required."))
             }
         }
-        .task { await load() }
+        .disabled(loading || saving)
+        .scrollContentBackground(.hidden)
+        .background(Brand.background)
+        .navigationTitle(page.title(model))
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: model.canManageHome) { await load() }
     }
+
+    @ViewBuilder private func roomEditor(_ snapshot: StevoraAdminAPI.RoomSnapshot) -> some View {
+        StevoraSettingsPicker(title: model.localized("Стая", "Room"),
+            choices: snapshot.rooms.map { .init(id: $0.id, name: roomName($0), detail: $0.id) }, selection: $selectedRoom)
+        if let room = snapshot.rooms.first(where: { $0.id == selectedRoom }) {
+            Section(model.localized("Име и подредба", "Name and order")) {
+                TextField(room.name, text: Binding(get: { roomAliases[room.id] ?? room.name },
+                                                 set: { roomAliases[room.id] = $0 }))
+                if let index = roomOrder.firstIndex(of: room.id) {
+                    Stepper(value: Binding(get: { index + 1 }, set: { next in
+                        guard let current = roomOrder.firstIndex(of: room.id), roomOrder.indices.contains(next - 1) else { return }
+                        roomOrder.remove(at: current)
+                        roomOrder.insert(room.id, at: next - 1)
+                    }), in: 1...max(1, roomOrder.count)) {
+                        LabeledContent(model.localized("Позиция", "Position"), value: "\(index + 1) / \(roomOrder.count)")
+                    }
+                }
+            }
+            Section("BG / EN") {
+                ForEach(["bg", "en"], id: \.self) { locale in
+                    TextField(locale.uppercased(), text: Binding(get: { bilingualRooms[room.id]?[locale] ?? "" },
+                        set: { bilingualRooms[room.id, default: [:]][locale] = $0 }))
+                }
+                Button(model.localized("Запази стаята", "Save room")) { Task { await saveRoomLayout(room.id) } }
+            }
+        }
+    }
+
+    @ViewBuilder private func deviceEditor(_ snapshot: StevoraAdminAPI.RoomSnapshot) -> some View {
+        StevoraSettingsPicker(title: model.localized("Устройство", "Device"), choices: deviceChoices(snapshot), selection: $selectedEntity)
+        if let entity = snapshot.entities.first(where: { $0.id == selectedEntity }) {
+            Section(model.localized("Видимост", "Visibility")) {
+                if entity.disabled || entity.hidden {
+                    Label(model.localized("Скрито или деактивирано в дома", "Hidden or disabled in this home"), systemImage: "lock")
+                } else {
+                    Picker(model.localized("Показване в дома", "Show in home"), selection: Binding(
+                        get: { snapshot.visibility[entity.id] ?? "default" },
+                        set: { value in Task { await setVisibility(entity.id, value) } }
+                    )) {
+                        Text(model.localized("Автоматично", "Automatic")).tag("default")
+                        Text(model.localized("Включи", "Include")).tag("include")
+                        Text(model.localized("Изключи", "Exclude")).tag("exclude")
+                    }
+                }
+            }
+            Section(model.localized("Персонализиране", "Customize")) {
+                TextField(model.localized("Име", "Name"), text: Binding(
+                    get: { deviceProfiles[entity.id]?.name ?? "" },
+                    set: { deviceProfiles[entity.id, default: .empty].name = $0 }))
+                TextField("mdi:icon", text: Binding(get: { deviceProfiles[entity.id]?.icon ?? "" },
+                    set: { deviceProfiles[entity.id, default: .empty].icon = $0 }))
+                Picker(model.localized("Изглед", "Layout"), selection: Binding(
+                    get: { deviceProfiles[entity.id]?.layout ?? "compact" },
+                    set: { deviceProfiles[entity.id, default: .empty].layout = $0 }
+                )) {
+                    Text(model.localized("Информация", "Information")).tag("info")
+                    Text(model.localized("Компактен", "Compact")).tag("compact")
+                    Text(model.localized("Разширен", "Expanded")).tag("expanded")
+                }
+                StevoraSettingsPicker(title: model.localized("Стая", "Room"),
+                    choices: [.init(id: "", name: model.localized("Автоматично", "Automatic"))] +
+                        snapshot.rooms.map { .init(id: $0.id, name: roomName($0)) },
+                    selection: Binding(get: { deviceProfiles[entity.id]?.areaId ?? "" },
+                        set: { deviceProfiles[entity.id, default: .empty].areaId = $0?.isEmpty == false ? $0 : nil }))
+                Toggle(model.localized("Автоматични контроли", "Automatic controls"), isOn: Binding(
+                    get: { deviceProfiles[entity.id]?.controls == nil },
+                    set: { deviceProfiles[entity.id, default: .empty].controls = $0 ? nil : [] }))
+                if let controls = deviceProfiles[entity.id]?.controls {
+                    let options = Set((entity.availableControls ?? []) + controls).sorted()
+                    StevoraSettingsPicker(title: model.localized("Избрани контроли", "Selected controls"),
+                        choices: options.map { .init(id: $0, name: $0.replacingOccurrences(of: "_", with: " ")) },
+                        selection: .constant(nil), multiple: Binding(get: { Set(deviceProfiles[entity.id]?.controls ?? []) },
+                            set: { deviceProfiles[entity.id, default: .empty].controls = $0.sorted() }))
+                }
+                let ids = deviceProfiles[entity.id]?.userIds ?? []
+                if let roster {
+                    let known = Set(roster.map(\.id))
+                    let options = roster.map { StevoraSettingsPicker.Choice(id: $0.id, name: $0.name) }
+                        + ids.filter { !known.contains($0) }.map { .init(id: $0, name: $0) }
+                    StevoraSettingsPicker(title: model.localized("Видимост по потребители", "Audience"),
+                        choices: options, selection: .constant(nil),
+                        multiple: Binding(get: { Set(deviceProfiles[entity.id]?.userIds ?? []) },
+                                          set: { deviceProfiles[entity.id, default: .empty].userIds = $0.sorted() }))
+                    if ids.isEmpty {
+                        Text(model.localized("Всички потребители с достъп в дома.", "All users with access in this home."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(model.localized("Списъкът с потребители е недостъпен. Обнови, за да промениш достъпа.",
+                                         "User list unavailable. Refresh to change the audience.")).font(.caption)
+                }
+                Button(model.localized("Запази устройството", "Save device")) { Task { await saveDevice(entity.id) } }
+            }
+            Section("BG / EN") {
+                ForEach(["bg", "en"], id: \.self) { locale in
+                    TextField(locale.uppercased(), text: Binding(get: { bilingualEntities[entity.id]?[locale] ?? "" },
+                        set: { bilingualEntities[entity.id, default: [:]][locale] = $0 }))
+                }
+                Button(model.localized("Запази преводите", "Save translations")) { Task { await saveTranslations(entityID: entity.id) } }
+            }
+        }
+    }
+
+    @ViewBuilder private func assistantEditor(_ snapshot: StevoraAdminAPI.AssistantSnapshot) -> some View {
+        let pipelines = snapshot.pipelines.map { StevoraSettingsPicker.Choice(id: $0.id, name: $0.name) }
+        StevoraSettingsPicker(title: model.localized("Основен асистент", "Default assistant"),
+            choices: [.init(id: "", name: model.localized("Автоматично", "Automatic"))] + pipelines,
+            selection: Binding(get: { selectedDefault }, set: { selectedDefault = $0 ?? "" }))
+        StevoraSettingsPicker(title: model.localized("Потребител", "User"),
+            choices: snapshot.users.map { .init(id: $0.id, name: $0.name) }, selection: $selectedUser)
+        if let user = snapshot.users.first(where: { $0.id == selectedUser }) {
+            StevoraSettingsPicker(title: model.localized("Личен асистент", "Personal assistant"),
+                choices: [.init(id: "", name: model.localized("Наследи основния", "Use default"))] + pipelines,
+                selection: Binding(get: { userPipelines[user.id] ?? "" },
+                    set: { userPipelines[user.id] = $0?.isEmpty == false ? $0 : nil }))
+        }
+        Button(model.localized("Запази асистента", "Save assistant")) { Task { await saveAssistant() } }
+    }
+}
+
+#Preview {
+    let model = StevoraModel()
+    NavigationStack { StevoraManagersView(model: model, page: .rooms) }.environmentObject(model)
 }

@@ -211,36 +211,40 @@ private struct StevoraDashboard: View {
         TabView(selection: $selected) {
             ForEach(StevoraTab.allCases, id: \.self) { tab in
                 NavigationStack {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 21) {
-                            banner
-                            Group {
-                                switch tab {
-                                case .home: home
-                                case .rooms: rooms
-                                case .climate: climate
-                                case .assistant: StevoraAssistView().frame(minHeight: 570)
-                                case .more: more
+                    if tab == .more {
+                        StevoraSettingsHome()
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 21) {
+                                banner
+                                Group {
+                                    switch tab {
+                                    case .home: home
+                                    case .rooms: rooms
+                                    case .climate: climate
+                                    case .assistant: StevoraAssistView().frame(minHeight: 570)
+                                    case .more: EmptyView()
+                                    }
+                                }
+                                if let error = model.error {
+                                    Text(error).font(.footnote).foregroundStyle(.orange)
                                 }
                             }
-                            if let error = model.error {
-                                Text(error).font(.footnote).foregroundStyle(.orange)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 16)
+                            .padding(.bottom, 95)
+                        }
+                        .background(StevoraBackdrop())
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button { Task { await model.refresh() } } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .accessibilityLabel(model.localized("Обнови", "Refresh"))
                             }
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 16)
-                        .padding(.bottom, 95)
+                        .refreshable { await model.refresh() }
                     }
-                    .background(StevoraBackdrop())
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button { Task { await model.refresh() } } label: {
-                                Image(systemName: "arrow.clockwise")
-                            }
-                            .accessibilityLabel(model.localized("Обнови", "Refresh"))
-                        }
-                    }
-                    .refreshable { await model.refresh() }
                 }
                 .tabItem { Label(tab.label(model), systemImage: tab.icon) }
                 .tag(tab)
@@ -445,63 +449,7 @@ private struct StevoraDashboard: View {
         }
     }
 
-    private var more: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            section(model.localized("КОНТРОЛЕН ЦЕНТЪР", "CONTROL CENTER"),
-                    subtitle: model.localized("Автоматизации и настройки", "Routines and settings"))
-            VStack(alignment: .leading, spacing: 13) {
-                Text(model.localized("Сцени и автоматизации", "Scenes and automations"))
-                    .font(.headline)
-                ForEach(model.projectedEntities.filter {
-                    ["scene", "script", "automation"].contains($0.domain)
-                    && !$0.id.lowercased().contains("backlight")
-                }) { entity in
-                    HStack(spacing: 9) {
-                        Image(systemName: "play.square.stack.fill").foregroundStyle(Brand.cyan)
-                        Text(model.displayName(entity)).lineLimit(2)
-                        Spacer()
-                        Button {
-                            Task { await model.runRoutine(entity) }
-                        } label: {
-                            Image(systemName: "play.circle.fill").font(.title2)
-                        }.accessibilityLabel(model.localized("Стартирай", "Run"))
-                    }
-                    .padding(.vertical, 6)
-                }
-            }.padding(19).modifier(StevoraGlassCard())
-            if model.isAdmin && model.liveConnected && model.stevoraManifest != nil {
-                DisclosureGroup(model.localized("Стаи, устройства и асистенти", "Rooms, devices and assistants")) {
-                    StevoraManagersView(model: model)
-                }.padding(19).modifier(StevoraGlassCard())
-            }
-            StevoraPresenceSettings(presence: model.presence)
-            VStack(alignment: .leading, spacing: 15) {
-                Text(model.localized("Език", "Language")).font(.headline)
-                Picker("Language", selection: Binding(
-                    get: { model.language },
-                    set: { value in Task { await model.setLanguage(value) } }
-                )) {
-                    Text("Български").tag("bg")
-                    Text("English").tag("en")
-                }.pickerStyle(.segmented).disabled(model.savingLanguage || !model.liveConnected)
-                if let name = model.accountName {
-                    LabeledContent(model.localized("Профил", "Account"), value: name)
-                }
-                if let manifest = model.stevoraManifest {
-                    LabeledContent(model.localized("Ревизия на дома", "Home revision"), value: String(manifest.revision))
-                }
-                if let url = URL(string: model.address), model.stevoraManifest != nil {
-                    Link(model.localized("Отвори STEVORA OS", "Open STEVORA OS"), destination: url)
-                }
-                Text(model.address).font(.caption).foregroundStyle(Brand.muted)
-                Text(model.connectionMode).font(.caption).foregroundStyle(Brand.muted)
-                Button(role: .destructive) { model.logout() } label: {
-                    Label(model.localized("Изход от профила", "Sign out"),
-                          systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            }.padding(19).modifier(StevoraGlassCard())
-        }
-    }
+
 }
 
 private struct StevoraDeviceCard: View {

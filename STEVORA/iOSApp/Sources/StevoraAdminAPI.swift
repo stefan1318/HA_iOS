@@ -63,12 +63,15 @@ enum StevoraAdminAPI {
         struct Entity: Decodable, Identifiable {
             let entityId: String
             let name: String
+            let areaID: String?
+            let availableControls: [String]?
             let included: Bool
             let disabled: Bool
             let hidden: Bool
             var id: String { entityId }
             enum CodingKeys: String, CodingKey {
                 case entityId = "entity_id"
+                case areaID = "area_id", availableControls = "available_controls"
                 case name, included, disabled, hidden
             }
         }

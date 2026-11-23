@@ -8,7 +8,7 @@ def read(path):
     return (root / path).read_text(encoding="utf-8")
 contract = read("STEVORA_ECOSYSTEM_CONTRACT.md")
 model = read("STEVORA/iOSApp/Sources/StevoraModel.swift")
-views = read("STEVORA/iOSApp/Sources/StevoraViews.swift")
+views = read("STEVORA/iOSApp/Sources/StevoraViews.swift") + read("STEVORA/iOSApp/Sources/StevoraSettingsHome.swift")
 network = read("STEVORA/iOSApp/Sources/StevoraNetwork.swift")
 live = read("STEVORA/iOSApp/Sources/StevoraLiveUpdates.swift")
 assist = read("STEVORA/iOSApp/Sources/StevoraAssistantGateway.swift")
