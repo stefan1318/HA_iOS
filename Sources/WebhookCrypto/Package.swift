@@ -15,7 +15,7 @@ let package = Package(
     ],
     dependencies: [
         // Pinned to the app's exact version so Xcode's package graph unifies it into one instance.
-        .package(url: "https://github.com/jedisct1/swift-sodium", exact: "0.11.0"),
+        .package(url: "https://github.com/jedisct1/swift-sodium", exact: "0.12.0"),
     ],
     targets: [
         .target(
