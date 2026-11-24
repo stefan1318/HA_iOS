@@ -348,7 +348,7 @@ private struct StevoraDashboard: View {
                         Image(systemName: "air.conditioner.horizontal.fill").foregroundStyle(Brand.cyan)
                         VStack(alignment: .leading) {
                             Text(model.localized("Режим", "Mode")).font(.caption).foregroundStyle(Brand.muted)
-                            Text(model.projectedEntities.first(where: { $0.domain == "climate" })?.state ?? "—").font(.headline)
+                            Text(model.stateLabel(model.projectedEntities.first(where: { $0.domain == "climate" })?.state ?? "—")).font(.headline)
                         }
                     }
                 }
@@ -480,7 +480,7 @@ private struct StevoraDeviceCard: View {
                 Button { showDetails.toggle() } label: {
                     VStack(alignment: .leading, spacing: 3) {
                     Text(name).font(.headline)
-                    Text(entity.state + (entity.attributes.unit_of_measurement.map { " " + $0 } ?? ""))
+                    Text(model.stateLabel(entity.state) + (entity.attributes.unit_of_measurement.map { " " + $0 } ?? ""))
                         .font(.caption).foregroundStyle(Brand.muted)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -502,7 +502,6 @@ private struct StevoraDeviceCard: View {
                 }
             }
             if showDetails {
-                Text(entity.id).font(.caption2).foregroundStyle(Brand.muted)
                 if model.allows(entity, "temperature"), let target = entity.attributes.temperature {
                     HStack(spacing: 14) {
                         Text(model.localized("Зададена", "Target") + ": \(Int(target))°")

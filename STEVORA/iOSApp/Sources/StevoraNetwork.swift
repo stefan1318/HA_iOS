@@ -174,6 +174,14 @@ struct HAClient {
         }
     }
 
+    func createRoutine(name: String, source: String, whenOn: Bool, target: HAEntity, turnOn: Bool) async throws {
+        let config: [String: Any] = ["alias": name, "mode": "single",
+            "triggers": [["trigger": "state", "entity_id": source, "to": whenOn ? "on" : "off"]],
+            "actions": [["action": target.domain + (turnOn ? ".turn_on" : ".turn_off"), "target": ["entity_id": target.id]]]]
+        _ = try await request("/api/config/automation/config/" + UUID().uuidString, method: "POST",
+                              body: JSONSerialization.data(withJSONObject: config))
+    }
+
     func check() async throws {
         _ = try await request("/api/")
     }

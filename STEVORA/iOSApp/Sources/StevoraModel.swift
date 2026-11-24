@@ -212,7 +212,24 @@ final class StevoraModel: ObservableObject {
     var canManageHome: Bool { isAdmin && connected && liveConnected && stevoraManifest != nil }
 
     func displayName(_ entity: HAEntity) -> String {
-        stevoraManifest?.entities?.first { $0.entityId == entity.id }?.name ?? entity.name
+        let name = stevoraManifest?.entities?.first { $0.entityId == entity.id }?.name ?? entity.name
+        return name == entity.id ? String(name.split(separator: ".").last ?? "").replacingOccurrences(of: "_", with: " ").capitalized : name
+    }
+
+    func stateLabel(_ state: String) -> String {
+        let labels = ["on": ("Включено", "On"), "off": ("Изключено", "Off"), "unknown": ("Няма данни", "Unknown"),
+                      "unavailable": ("Недостъпно", "Unavailable"), "cool": ("Охлаждане", "Cooling"), "heat": ("Отопление", "Heating"),
+                      "fan_only": ("Вентилация", "Fan only"), "heat_cool": ("Автоматично", "Auto")]
+        guard let label = labels[state] else { return state.replacingOccurrences(of: "_", with: " ") }
+        return localized(label.0, label.1)
+    }
+
+    func createRoutine(name: String, source: String?, whenOn: Bool, target: String?, turnOn: Bool) async throws {
+        guard canManageHome, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let source, let target, projectedEntities.contains(where: { $0.id == source && !$0.id.lowercased().contains("backlight") }),
+              let device = projectedEntities.first(where: { $0.id == target }), allows(device, "toggle") else { throw HAError.unauthorized }
+        try await client().createRoutine(name: name, source: source, whenOn: whenOn, target: device, turnOn: turnOn)
+        await refresh()
     }
 
     func allows(_ entity: HAEntity, _ action: String) -> Bool {
