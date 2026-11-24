@@ -34,11 +34,15 @@ final class SettingsNavigationTests: XCTestCase {
 
     func testAdministratorCanOpenDeviceManagerFromBulgarianSettings() {
         let app = launch(role: "admin", language: "bg")
-        let devices = app.buttons["settings.manager.devices"]
-        XCTAssertTrue(devices.waitForExistence(timeout: 5))
+        let devices = app.descendants(matching: .any).matching(identifier: "settings.manager.devices").firstMatch
+        for _ in 0..<4 {
+            if devices.exists && devices.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(devices.exists && devices.isHittable, app.debugDescription)
         snapshot(app, "Admin settings BG")
         devices.tap()
-        XCTAssertTrue(app.navigationBars["Устройства"].exists)
+        XCTAssertTrue(app.navigationBars["Устройства"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(devices.exists)
     }
