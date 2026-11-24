@@ -207,3 +207,20 @@ private struct HAPanelsCacheKey: HACacheKey {
         )
     }
 }
+
+/** STEVORA capability probe. Uses the existing OAuth-authenticated HAConnection. */
+public struct HAStevoraDiscovery: HADataDecodable {
+    public let installationId: String
+    public let revision: Int
+
+    public init(data: HAData) throws {
+        self.installationId = try data.decode("installation_id")
+        self.revision = try data.decode("revision")
+    }
+}
+
+public extension HATypedRequest {
+    static func stevoraDiscovery() -> HATypedRequest<HAStevoraDiscovery> {
+        .init(request: .init(type: "stevora/manifest"))
+    }
+}
