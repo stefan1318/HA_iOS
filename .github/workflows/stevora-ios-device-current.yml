@@ -116,7 +116,7 @@ jobs:
               assert info["CFBundleIdentifier"]=="com.stevora.companion.ios"
               assert info["CFBundleDisplayName"]=="STEVORA"
           data={"source_ref":"feature/stevora-os-dev4-ios-sync","source_sha":(root/"stevora-source-sha.txt").read_text().strip(),"workflow_run":os.environ["GITHUB_RUN_ID"],"bundle_id":info["CFBundleIdentifier"],"display_name":info["CFBundleDisplayName"],"app_version":info["CFBundleShortVersionString"],"build_number":info["CFBundleVersion"],"ipa_sha256":hashlib.sha256(ipa.read_bytes()).hexdigest(),"signing":"unsigned"}
-          (root/f"STEVORA-iOS-provenance-{suffix}.json").write_text(json.dumps(data,indent=2)+"\\n")
+          (root/f"STEVORA-iOS-provenance-{suffix}.json").write_text(json.dumps(data,indent=2)+"\n")
           print(json.dumps(data,indent=2))
           PY
       - name: Upload unsigned IPA
