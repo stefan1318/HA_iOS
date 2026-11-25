@@ -1,0 +1,98 @@
+name: STEVORA iOS device IPA (local Mac)
+
+'on':
+  push:
+    branches: [ci/stevora-device-local-09d1e93]
+    paths: [.github/workflows/stevora-ios-device-local.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stevora-ios-device-local
+  cancel-in-progress: false
+
+jobs:
+  device-ipa:
+    if: github.repository == 'stefan1318/HA_iOS' && github.actor == 'stefan1318'
+    runs-on: [self-hosted, macOS, ARM64, stevora-ios]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 09d1e93337dc412cfea5b0ee81be6eb52c8994ea
+          persist-credentials: false
+      - name: Verify published iOS OAuth callback registration
+        run: |
+          client_id=$(sed -n 's/.*static let clientID = "\(.*\)"/\1/p' STEVORA/iOSApp/Sources/StevoraOAuth.swift)
+          curl --fail --silent --show-error --retry 3 --max-time 20 "$client_id" -o "$RUNNER_TEMP/ios-client.html"
+          cmp "$RUNNER_TEMP/ios-client.html" STEVORA/oauth/ios-client.html
+          grep -F '<link rel="redirect_uri" href="com.stevora://auth/callback">' "$RUNNER_TEMP/ios-client.html"
+      - name: Xcode environment
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: |
+          echo /opt/homebrew/bin >> "$GITHUB_PATH"
+          if ! PATH="/opt/homebrew/bin:$PATH" command -v xcodegen >/dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 /opt/homebrew/bin/brew install xcodegen
+          fi
+      - name: Verify STEVORA Ecosystem policy gate
+        run: python3 scripts/check_stevora_ecosystem_ios.py
+      - name: Verify optional STEVORA manifest compatibility
+        run: python3 scripts/check_stevora_ios_manifest.py
+      - name: Generate STEVORA icon
+        run: |
+          swift STEVORA/iOSApp/Branding/generate-icon.swift \
+            STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+      - name: Validate STEVORA brand and storyboard
+        run: |
+          test -s STEVORA/iOSApp/Branding/stevora-logo.png
+          test -s STEVORA/iOSApp/Assets.xcassets/StevoraLogo.imageset/stevora-logo.png
+          sips -g pixelWidth -g pixelHeight STEVORA/iOSApp/Branding/stevora-logo.png
+          python3 -c 'import xml.etree.ElementTree as ET; ET.parse("STEVORA/iOSApp/Branding/LaunchScreen.storyboard")'
+      - name: Generate project
+        run: |
+          cd STEVORA/iOSApp
+          xcodegen generate --spec project.yml
+      - name: Build unsigned iPhone app
+        run: |
+          set -o pipefail
+          xcodebuild -project STEVORA/iOSApp/StevoraCompanion.xcodeproj \
+            -scheme StevoraCompanion -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/stevora-device-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/stevora-device-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+      - name: Check built application metadata
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          import plistlib
+          app = Path(os.environ["RUNNER_TEMP"]) / f"stevora-device-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}/Build/Products/Release-iphoneos/StevoraCompanion.app"
+          info = plistlib.loads((app / "Info.plist").read_bytes())
+          assert info["CFBundleIdentifier"] == "com.stevora.companion.ios"
+          assert info["CFBundleVersion"].isdigit() and info["CFBundleShortVersionString"]
+          ats = info["NSAppTransportSecurity"]
+          assert ats.get("NSAllowsArbitraryLoads", False) is False and ats["NSAllowsLocalNetworking"] is True
+          assert "location" in info["UIBackgroundModes"]
+          assert info["NSLocationWhenInUseUsageDescription"] and info["NSLocationAlwaysAndWhenInUseUsageDescription"]
+          for language in ("bg", "en"):
+              assert (app / f"{language}.lproj/InfoPlist.strings").is_file()
+          print("PASS: packaged app identity, version, LAN policy, location and BG/EN permission prompts")
+          PYTHON
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          staging=$(mktemp -d "$RUNNER_TEMP/stevora-payload.XXXXXXXX")
+          mkdir "$staging/Payload"
+          cp -R "$RUNNER_TEMP/stevora-device-$suffix/Build/Products/Release-iphoneos/StevoraCompanion.app" "$staging/Payload/"
+          cd "$staging"
+          /usr/bin/zip -qry "$RUNNER_TEMP/STEVORA-iOS-unsigned-$suffix.ipa" Payload
+          test -s "$RUNNER_TEMP/STEVORA-iOS-unsigned-$suffix.ipa"
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: STEVORA-iOS-unsigned-IPA
+          path: ${{ runner.temp }}/STEVORA-iOS-unsigned-${{ github.run_id }}-${{ github.run_attempt }}.ipa
+          if-no-files-found: error
