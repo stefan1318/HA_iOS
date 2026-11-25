@@ -61,7 +61,7 @@ struct RemindersSyncSettings: Codable, Equatable {
     ]
 
     private static let defaultsKey = "remindersSyncSettings"
-    private static var defaults: UserDefaults { UserDefaults(suiteName: AppConstants.AppGroupID) ?? .standard }
+    private static var defaults: UserDefaults { AppConstants.appGroupDefaults ?? .standard }
 
     static var current: RemindersSyncSettings {
         guard let data = defaults.data(forKey: defaultsKey),

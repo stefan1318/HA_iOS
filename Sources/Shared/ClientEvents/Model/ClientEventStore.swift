@@ -72,9 +72,10 @@ final class ClientEventStore: ClientEventStoreProtocol {
         let fileURL: URL
         if let customFileURL = self.fileURL {
             fileURL = customFileURL
+        } else if AppConstants.isPersonalTeamBuild {
+            fileURL = eventsFile
         } else {
-            guard let containerURL = FileManager.default
-                .containerURL(forSecurityApplicationGroupIdentifier: AppConstants.AppGroupID) else {
+            guard let containerURL = AppConstants.appGroupContainerIfAvailable else {
                 Current.Log.error("Failed to get container URL for get client events")
                 return []
             }

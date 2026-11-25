@@ -189,6 +189,8 @@ class NotificationManager: NSObject, LocalPushManagerDelegate {
     }
 
     func setupFirebase() {
+        guard !AppConstants.isPersonalTeamBuild else { return }
+
         Current.Log.verbose("Calling UIApplication.shared.registerForRemoteNotifications()")
         UIApplication.shared.registerForRemoteNotifications()
 

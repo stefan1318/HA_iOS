@@ -15,12 +15,14 @@ struct PrivacyView: View {
                 title: L10n.SettingsDetails.Privacy.title,
                 subtitle: L10n.SettingsDetails.Privacy.body
             )
-            Section(footer: Text(L10n.SettingsDetails.Privacy.Messaging.description)) {
-                Toggle(L10n.SettingsDetails.Privacy.Messaging.title, isOn: $messaging)
-                    .onChange(of: messaging) { value in
-                        Current.settingsStore.privacy.messaging = value
-                        Messaging.messaging().isAutoInitEnabled = value
-                    }
+            if !AppConstants.isPersonalTeamBuild {
+                Section(footer: Text(L10n.SettingsDetails.Privacy.Messaging.description)) {
+                    Toggle(L10n.SettingsDetails.Privacy.Messaging.title, isOn: $messaging)
+                        .onChange(of: messaging) { value in
+                            Current.settingsStore.privacy.messaging = value
+                            Messaging.messaging().isAutoInitEnabled = value
+                        }
+                }
             }
             Section(footer: Text(L10n.SettingsDetails.Privacy.Alerts.description)) {
                 Toggle(L10n.SettingsDetails.Privacy.Alerts.title, isOn: $alerts)

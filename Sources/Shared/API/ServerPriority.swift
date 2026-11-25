@@ -8,7 +8,7 @@ public enum ServerPriority {
 
     /// The app group, so an extension reads what the app last worked out.
     private static var defaults: UserDefaults? {
-        UserDefaults(suiteName: AppConstants.AppGroupID)
+        AppConstants.appGroupDefaults
     }
 
     /// Records the server whose home the app last placed the person at. A nil match means "stay

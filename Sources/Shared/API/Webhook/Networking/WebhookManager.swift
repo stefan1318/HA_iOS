@@ -867,7 +867,7 @@ class WebhookSessionInfo: CustomStringConvertible, Hashable {
             }
 
             return with(configuration) {
-                $0.sharedContainerIdentifier = AppConstants.AppGroupID
+                $0.sharedContainerIdentifier = AppConstants.isPersonalTeamBuild ? nil : AppConstants.AppGroupID
                 $0.httpCookieStorage = nil
                 $0.httpCookieAcceptPolicy = .never
                 $0.httpShouldSetCookies = false

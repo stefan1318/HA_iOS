@@ -268,7 +268,9 @@ public enum PermissionType {
                     Current.Log.error("Error when requesting notifications permissions: \(error)")
                 }
                 DispatchQueue.main.async {
-                    UIApplication.shared.registerForRemoteNotifications()
+                    if !AppConstants.isPersonalTeamBuild {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
                     let status: PermissionStatus = granted ? .authorized : .denied
                     completionHandler(granted, status)
                 }
@@ -291,7 +293,7 @@ public extension UNAuthorizationOptions {
     static var defaultOptions: UNAuthorizationOptions {
         var opts: UNAuthorizationOptions = [.alert, .badge, .sound, .providesAppNotificationSettings]
 
-        if !Current.isCatalyst {
+        if !Current.isCatalyst, !AppConstants.isPersonalTeamBuild {
             // we don't have provisioning for critical alerts in catalyst yet, and asking for permission errors
             opts.insert(.criticalAlert)
         }

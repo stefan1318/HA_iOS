@@ -1,0 +1,29 @@
+include:
+  - project.yml
+name: StevoraCompanion-Personal
+configs:
+  Debug: debug
+  Debug-Personal: debug
+  Release: release
+targets:
+  StevoraCompanion:
+    settings:
+      configs:
+        Debug-Personal:
+          PRODUCT_BUNDLE_IDENTIFIER: ${STEVORA_PERSONAL_BUNDLE_ID}
+          INFOPLIST_KEY_CFBundleDisplayName: STEVORA Personal
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: Apple Development
+          CODE_SIGNING_ALLOWED: YES
+          CODE_SIGN_ENTITLEMENTS: ""
+    info:
+      path: Generated/StevoraPersonalInfo.plist
+schemes:REPLACE:
+  STEVORA-Personal:
+    build:
+      targets:
+        StevoraCompanion: [run, analyze]
+    run:
+      config: Debug-Personal
+    analyze:
+      config: Debug-Personal

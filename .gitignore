@@ -91,3 +91,9 @@ vendor/bundle
 
 # Local SPM package transient files
 Sources/HADesignSystem/Package.resolved
+
+# Local Personal Team project
+/STEVORA-Personal.xcodeproj/
+/STEVORA/iOSApp/StevoraCompanion-Personal.xcodeproj/
+/STEVORA/iOSApp/Generated/StevoraPersonalInfo.plist
+/STEVORA/iOSApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png

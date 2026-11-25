@@ -25,12 +25,12 @@ enum LiveActivityLocalPushResult {
     private static let keyPrefix = "liveActivityLocalPushResult."
 
     static func record(_ outcome: Outcome, confirmID: String) {
-        UserDefaults(suiteName: AppConstants.AppGroupID)?.set(outcome.rawValue, forKey: keyPrefix + confirmID)
+        AppConstants.appGroupDefaults?.set(outcome.rawValue, forKey: keyPrefix + confirmID)
     }
 
     /// Remove and return the outcomes recorded for `confirmIDs`.
     static func take(confirmIDs: Set<String>) -> [String: Outcome] {
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return [:] }
+        guard let defaults = AppConstants.appGroupDefaults else { return [:] }
         var taken: [String: Outcome] = [:]
         for confirmID in confirmIDs {
             let key = keyPrefix + confirmID

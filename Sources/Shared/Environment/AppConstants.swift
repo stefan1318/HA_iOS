@@ -315,12 +315,27 @@ public enum AppConstants {
         "group." + BundleID.lowercased()
     }
 
+    public static var isPersonalTeamBuild: Bool {
+        #if STEVORA_PERSONAL_TEAM
+        true
+        #else
+        false
+        #endif
+    }
+
+    public static var appGroupDefaults: UserDefaults? {
+        isPersonalTeamBuild ? .standard : UserDefaults(suiteName: AppGroupID)
+    }
+
+    static var appGroupContainerIfAvailable: URL? {
+        if isPersonalTeamBuild {
+            return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        }
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroupID)
+    }
+
     public static var AppGroupContainer: URL {
-        let fileManager = FileManager.default
-
-        let groupDir = fileManager.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.AppGroupID)
-
-        guard let groupDir else {
+        guard let groupDir = appGroupContainerIfAvailable else {
             Current.Log.error("Unable to get app group container URL; falling back to temporary directory")
             return URL(fileURLWithPath: NSTemporaryDirectory())
         }
@@ -458,7 +473,7 @@ public enum AppConstants {
     /// A permanent ID stored in UserDefaults and Keychain.
     public static var PermanentID: String {
         let storageKey = "deviceUID"
-        let defaultsStore = UserDefaults(suiteName: AppConstants.AppGroupID)
+        let defaultsStore = AppConstants.appGroupDefaults
         let keychain = KeychainAccess.Keychain(service: storageKey)
 
         if let keychainUID = keychain[storageKey] {

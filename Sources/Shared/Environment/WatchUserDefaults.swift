@@ -137,11 +137,11 @@ public final class WatchUserDefaults: WatchSensorSettings {
     /// budget) and must be able to read the flag.
     public var complicationRefreshNotificationsEnabled: Bool {
         get {
-            UserDefaults(suiteName: AppConstants.AppGroupID)?
+            AppConstants.appGroupDefaults?
                 .bool(forKey: WatchUserDefaultsKey.complicationRefreshNotificationsEnabled.rawValue) ?? false
         }
         set {
-            UserDefaults(suiteName: AppConstants.AppGroupID)?
+            AppConstants.appGroupDefaults?
                 .set(newValue, forKey: WatchUserDefaultsKey.complicationRefreshNotificationsEnabled.rawValue)
         }
     }
