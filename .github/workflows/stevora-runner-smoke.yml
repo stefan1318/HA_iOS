@@ -1,0 +1,25 @@
+name: STEVORA iOS runner smoke test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  smoke:
+    if: ${{ github.repository == 'stefan1318/HA_iOS' && github.ref == 'refs/heads/ci/stevora-runner-smoke' }}
+    runs-on: [self-hosted, macOS, ARM64, stevora-ios]
+    timeout-minutes: 5
+    steps:
+      - name: Check macOS, Xcode and iOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = macOS
+          test "$RUNNER_ARCH" = ARM64
+          test "$(uname -m)" = arm64
+          sw_vers -productVersion
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          xcrun swift --version
