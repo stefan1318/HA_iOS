@@ -12,7 +12,7 @@ public class SettingsStore {
 
     /// - Parameter prefs: the app group defaults. Tests pass a suite of their own, because every
     ///   process on a simulator shares the app group's, including test processes running at once.
-    init(prefs: UserDefaults = UserDefaults(suiteName: AppConstants.AppGroupID)!) {
+    init(prefs: UserDefaults = AppConstants.appGroupDefaults!) {
         self.prefs = prefs
     }
 

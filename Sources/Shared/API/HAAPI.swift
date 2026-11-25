@@ -462,9 +462,7 @@ public class HomeAssistantAPI {
     private func removeOldDownloadDirectory() {
         let fileManager = FileManager.default
 
-        if let downloadDataDir = fileManager.containerURL(
-            forSecurityApplicationGroupIdentifier: AppConstants.AppGroupID
-        )?.appendingPathComponent("downloadedData", isDirectory: true) {
+        if let downloadDataDir = AppConstants.appGroupContainerIfAvailable?.appendingPathComponent("downloadedData", isDirectory: true) {
             try? fileManager.removeItem(at: downloadDataDir)
         }
     }

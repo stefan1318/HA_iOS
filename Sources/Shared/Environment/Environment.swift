@@ -137,13 +137,13 @@ public class AppEnvironment {
 
         // Lets the end-to-end tests relaunch as another device; only honored in their configuration.
         if isFastlaneSnapshot,
-           let vendorID = UserDefaults(suiteName: AppConstants.AppGroupID)!.string(forKey: "E2E_VENDOR_IDENTIFIER"),
+           let vendorID = AppConstants.appGroupDefaults!.string(forKey: "E2E_VENDOR_IDENTIFIER"),
            !vendorID.isEmpty {
             device.identifierForVendor = { vendorID }
         }
 
         if isFastlaneSnapshot,
-           let path = UserDefaults(suiteName: AppConstants.AppGroupID)!.string(forKey: "E2E_CLIENT_CERTIFICATE_FILE"),
+           let path = AppConstants.appGroupDefaults!.string(forKey: "E2E_CLIENT_CERTIFICATE_FILE"),
            !path.isEmpty {
             self.e2eClientCertificateFile = URL(fileURLWithPath: path)
         }
@@ -632,7 +632,7 @@ public class AppEnvironment {
         #endif
     }()
 
-    private let isFastlaneSnapshot = UserDefaults(suiteName: AppConstants.AppGroupID)!.bool(forKey: "FASTLANE_SNAPSHOT")
+    private let isFastlaneSnapshot = AppConstants.appGroupDefaults!.bool(forKey: "FASTLANE_SNAPSHOT")
 
     /// A client certificate the end-to-end tests hand to onboarding in place of the file picker,
     /// which a UI test cannot drive; only honored in their configuration.

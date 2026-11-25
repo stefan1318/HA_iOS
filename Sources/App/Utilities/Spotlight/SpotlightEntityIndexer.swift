@@ -45,7 +45,7 @@ final class SpotlightEntityIndexer: ServerObserver {
     }
 
     private let index = CSSearchableIndex(name: Constants.indexName)
-    private let defaults = UserDefaults(suiteName: AppConstants.AppGroupID)
+    private let defaults = AppConstants.appGroupDefaults
     private var databaseObserver: NSObjectProtocol?
     private var backgroundObserver: NSObjectProtocol?
     private var foregroundObserver: NSObjectProtocol?

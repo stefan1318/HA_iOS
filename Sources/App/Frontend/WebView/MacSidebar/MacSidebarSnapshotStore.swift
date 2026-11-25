@@ -13,7 +13,7 @@ final class MacSidebarSnapshotStore {
     private let userDefaults: UserDefaults
     private var snapshots: [String: MacSidebarSnapshot]
 
-    init(userDefaults: UserDefaults = UserDefaults(suiteName: AppConstants.AppGroupID) ?? .standard) {
+    init(userDefaults: UserDefaults = AppConstants.appGroupDefaults ?? .standard) {
         self.userDefaults = userDefaults
         self.snapshots = Self.persistedSnapshots(in: userDefaults)
     }

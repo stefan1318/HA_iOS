@@ -13,7 +13,7 @@ import XCGLogger
 
 let keychain = AppConstants.Keychain
 
-let prefs = UserDefaults(suiteName: AppConstants.AppGroupID)!
+let prefs = AppConstants.appGroupDefaults!
 
 private extension UIApplication {
     /// Under the SwiftUI `App` lifecycle `UIApplication.shared.delegate` is SwiftUI's own internal

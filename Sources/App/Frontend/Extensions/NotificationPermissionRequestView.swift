@@ -60,6 +60,7 @@ struct NotificationPermissionRequestView: View {
             if let error {
                 Current.Log.error("Error when requesting notifications permissions: \(error)")
             }
+            guard !AppConstants.isPersonalTeamBuild else { return }
             DispatchQueue.main.async {
                 UIApplication.shared.registerForRemoteNotifications()
             }

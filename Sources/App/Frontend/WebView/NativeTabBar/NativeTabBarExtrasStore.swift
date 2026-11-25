@@ -10,7 +10,7 @@ final class NativeTabBarExtrasStore {
     private let userDefaults: UserDefaults
     private var extrasByServer: [String: NativeTabBarExtras]
 
-    init(userDefaults: UserDefaults = UserDefaults(suiteName: AppConstants.AppGroupID) ?? .standard) {
+    init(userDefaults: UserDefaults = AppConstants.appGroupDefaults ?? .standard) {
         self.userDefaults = userDefaults
         self.extrasByServer = Self.persistedExtras(in: userDefaults)
     }

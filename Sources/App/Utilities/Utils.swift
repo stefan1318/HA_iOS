@@ -87,7 +87,7 @@ func deleteKeychainCompletely() throws {
         }
     }
 
-    UserDefaults(suiteName: AppConstants.AppGroupID)?.removeObject(forKey: "deviceUID")
+    AppConstants.appGroupDefaults?.removeObject(forKey: "deviceUID")
     // Do not mark servers as deleted here. We want the sanitized GRDB mirror to
     // survive the forced restart so startup can recover the server list.
 }

@@ -43,7 +43,7 @@ enum LiveActivityPendingEnd {
         }
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         migrateLegacyTags(in: defaults)
         var requests = load(from: defaults).filter { $0.tag != tag }
         requests.append(Request(tag: tag, confirmID: confirmID))
@@ -63,7 +63,7 @@ enum LiveActivityPendingEnd {
     static func remove(tag: String) {
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         migrateLegacyTags(in: defaults)
         let requests = load(from: defaults)
         let remaining = requests.filter { $0.tag != tag }
@@ -74,7 +74,7 @@ enum LiveActivityPendingEnd {
     static func drainAll() -> [Request] {
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return [] }
+        guard let defaults = AppConstants.appGroupDefaults else { return [] }
         migrateLegacyTags(in: defaults)
         let observed = load(from: defaults)
         guard !observed.isEmpty else { return [] }

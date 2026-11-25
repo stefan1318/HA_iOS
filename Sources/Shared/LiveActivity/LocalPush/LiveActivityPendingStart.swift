@@ -108,7 +108,7 @@ enum LiveActivityPendingStart {
         LiveActivityPendingEnd.remove(tag: request.tag)
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         let queued = load(from: defaults)
         var requests = queued.filter { $0.tag != request.tag }
         requests.append(request.inheritingRelevanceScore(from: queued.first { $0.tag == request.tag }))
@@ -120,7 +120,7 @@ enum LiveActivityPendingStart {
     static func remove(tag: String) {
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         let requests = load(from: defaults)
         let remaining = requests.filter { $0.tag != tag }
         guard remaining.count != requests.count else { return }
@@ -134,7 +134,7 @@ enum LiveActivityPendingStart {
     static func drainAll() -> [Request] {
         lock.lock()
         defer { lock.unlock() }
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return [] }
+        guard let defaults = AppConstants.appGroupDefaults else { return [] }
         let observed = load(from: defaults)
         guard !observed.isEmpty else { return [] }
         // Subtract only the exact requests we read, so a concurrent extension write — whether a

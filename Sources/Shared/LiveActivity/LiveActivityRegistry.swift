@@ -682,24 +682,24 @@ public actor LiveActivityRegistry: LiveActivityRegistryProtocol {
     /// Whether Core holds a push token for the Live Activity with `tag`, so an end it re-sends
     /// through APNs reaches the activity while the app is suspended. Readable from the extensions.
     static func hasReportedToken(forTag tag: String) -> Bool {
-        let defaults = UserDefaults(suiteName: AppConstants.AppGroupID)
+        let defaults = AppConstants.appGroupDefaults
         return defaults?.stringArray(forKey: reportedTokenTagsKey)?.contains(tag) == true
     }
 
     private func reportedTokenTags() -> Set<String> {
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return [] }
+        guard let defaults = AppConstants.appGroupDefaults else { return [] }
         return Set(defaults.stringArray(forKey: Self.reportedTokenTagsKey) ?? [])
     }
 
     private func rememberReportedTokenTag(_ tag: String) {
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         var tags = Set(defaults.stringArray(forKey: Self.reportedTokenTagsKey) ?? [])
         guard tags.insert(tag).inserted else { return }
         defaults.set(Array(tags), forKey: Self.reportedTokenTagsKey)
     }
 
     private func forgetReportedTokenTag(_ tag: String) {
-        guard let defaults = UserDefaults(suiteName: AppConstants.AppGroupID) else { return }
+        guard let defaults = AppConstants.appGroupDefaults else { return }
         var tags = Set(defaults.stringArray(forKey: Self.reportedTokenTagsKey) ?? [])
         guard tags.remove(tag) != nil else { return }
         defaults.set(Array(tags), forKey: Self.reportedTokenTagsKey)

@@ -91,3 +91,6 @@ vendor/bundle
 
 # Local SPM package transient files
 Sources/HADesignSystem/Package.resolved
+
+# Local Personal Team project
+/STEVORA-Personal.xcodeproj/
